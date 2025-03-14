@@ -5,7 +5,7 @@ import math
 
 class Config:
     EPOCHS = 100000
-    N_SAMPLES = 15
+    N_SAMPLES = 25
     ADAPTIVE_SAMPLES = 8000
     ADAPTIVE_BASE_RATE = 5
     LR = 5e-4
@@ -15,7 +15,7 @@ class Config:
     EMB_SCALE = (1.5, 2.0) # emb sacle for (x, t)
     EMB_DIM = 64
 
-    DOMAIN = ((-50, 50), (-50, 50), (-50, 50), (0, 1.5))
+    DOMAIN = ((-0.7, 0.7), (-0.7, 0.7), (-0.7, 0.7), (0, 1.5))
     DATA_PATH = "./data/ice-melting/"
     LOG_DIR = "/root/tf-logs"
     PREFIX = "ice-melting"
@@ -32,14 +32,14 @@ class Config:
     CAUSAL_WEIGHT = False
 
     LAMBDA = 5
-    NN = 128
+    NN = 64
     HH = 100 / NN
     EPSILON = 6*HH / (2*math.sqrt(2) * math.atanh(0.9))
     MM = 0.1
     R0 = 35
 
 
-    Lc = 1
+    Lc = 100
     Tc = 1
     AC_PRE_SCALE = 1e6
     CH_PRE_SCALE = 1e0
@@ -49,7 +49,7 @@ class Config:
         "eps": 1e-5,
         "step_size": 10,
         "max_last_weight": 0.99,
-        "min_mean_weight": 0.5,
+        "min_mean_weight": 0.7,
         "max_eps": 1e0,
         "chunks": 24,
     }

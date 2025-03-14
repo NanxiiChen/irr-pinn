@@ -206,6 +206,7 @@ class PINN(nn.Module):
         losses, grads, aux_vars = self.compute_losses_and_grads(params, batch, eps)
 
         weights = self.grad_norm_weights(grads)
+        # weights = jnp.ones_like(losses)
         weights = jax.lax.stop_gradient(weights)
 
         return jnp.sum(weights * losses), (losses, weights, aux_vars)

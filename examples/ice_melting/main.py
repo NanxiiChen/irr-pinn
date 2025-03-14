@@ -96,7 +96,7 @@ class Sampler:
         x = lhs_sampling(
             mins=[self.domain[0][0], self.domain[1][0], self.domain[2][0]],
             maxs=[self.domain[0][1], self.domain[1][1], self.domain[2][1]],
-            num=4000,
+            num=10000,
             key=key,
         )
         t = jnp.zeros_like(x[:, 0:1])
@@ -106,7 +106,7 @@ class Sampler:
         return (
             self.sample_pde_rar(pde_name=pde_name),
             self.sample_ic(),
-            self.sample_pde(),
+            # self.sample_pde(),
         )
 
 
@@ -139,19 +139,22 @@ class PFPINN(PINN):
         self.loss_fn_panel = [
             self.loss_pde,
             self.loss_ic,
-            self.loss_irr,
+            # self.loss_irr,
         ]
 
     @partial(jit, static_argnums=(0,))
     def net_u(self, params, x, t):
-        return jax.nn.tanh(self.model.apply(params, x, t))
+        # r = jnp.sqrt(x[0] ** 2 + x[1] ** 2 + x[2] ** 2)
+        # phi0 = jnp.tanh((self.cfg.R0 - r) / (jnp.sqrt(2) * self.cfg.EPSILON))
+        phi = self.model.apply(params, x, t)
+        return jax.nn.tanh(phi)
 
     @partial(jit, static_argnums=(0,))
     def net_pde(self, params, x, t):
         phi = self.net_u(params, x, t)
         dphi_dt = jax.jacrev(self.net_u, argnums=2)(params, x, t)
         hess_x = jax.hessian(self.net_u, argnums=1)(params, x, t)
-        lap_phi = jnp.linalg.trace(hess_x)
+        lap_phi = jnp.linalg.trace(hess_x) / self.cfg.Lc**2
 
         Fphi = 0.25 * (phi**2 - 1) ** 2
         dFdphi = phi**3 - phi
@@ -165,9 +168,9 @@ class PFPINN(PINN):
 
     @partial(jit, static_argnums=(0,))
     def ref_sol_ic(self, x, t):
-        r = jnp.sqrt(x[:, 0] ** 2 + x[:, 1] ** 2 + x[:, 2] ** 2)
+        r = jnp.sqrt(x[:, 0] ** 2 + x[:, 1] ** 2 + x[:, 2] ** 2) * self.cfg.Lc
         phi = jnp.tanh((self.cfg.R0 - r) / (jnp.sqrt(2) * self.cfg.EPSILON))
-        return phi
+        return jax.lax.stop_gradient(phi)
     
     @partial(jit, static_argnums=(0,))
     def net_speed(self, params, x, t):
@@ -191,10 +194,10 @@ def evaluate3D(pinn, params, mesh, ref_path, ts, **kwargs):
     )
     
     xlim = kwargs.get("xlim", (-0.5, 0.5))
-    ylim = kwargs.get("ylim", (0, 0.5))
+    ylim = kwargs.get("ylim", (-0.5, 0.5))
     zlim = kwargs.get("zlim", (-0.5, 0.5))
-    Lc = kwargs.get("Lc", 1e-4)
-    Tc = kwargs.get("Tc", 10.0)
+    Lc = kwargs.get("Lc", 100)
+    Tc = kwargs.get("Tc", 1.0)
 
     error = 0
     mesh /= Lc
@@ -203,7 +206,7 @@ def evaluate3D(pinn, params, mesh, ref_path, ts, **kwargs):
         t = jnp.ones_like(mesh[:, 0:1]) * tic / Tc
         pred = vmap(lambda x, t: pinn.net_u(params, x, t)[0], in_axes=(0, 0))(
             mesh, t
-        ).reshape(mesh.shape[0], 1)
+        ).flatten()
 
         ax = axes[idx, 0]
         # interface_idx = jnp.where((pred > 0.05) & (pred < 0.95))[0]
@@ -212,10 +215,10 @@ def evaluate3D(pinn, params, mesh, ref_path, ts, **kwargs):
             mesh[interface_idx, 0],
             mesh[interface_idx, 1],
             mesh[interface_idx, 2],
-            c=pred[interface_idx, 0],
+            c=pred[interface_idx],
             cmap="coolwarm",
             label="phi",
-            vmin=0,
+            vmin=-1,
             vmax=1,
         )
         ax.set(
@@ -341,12 +344,12 @@ for epoch in range(cfg.EPOCHS):
                 "loss/weighted",
                 f"loss/{pde_name}",
                 "loss/ic",
-                "loss/bc",
-                "loss/irr",
+                # "loss/bc",
+                # "loss/irr",
                 f"weight/{pde_name}",
                 "weight/ic",
-                "weight/bc",
-                "weight/irr",
+                # "weight/bc",
+                # "weight/irr",
                 "error/error",
             ],
             values=[weighted_loss, *loss_components, *weight_components, error],

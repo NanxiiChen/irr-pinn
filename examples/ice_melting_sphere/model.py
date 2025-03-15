@@ -1,0 +1,313 @@
+
+import sys
+from functools import partial
+from pathlib import Path
+
+import jax
+import jax.numpy as jnp
+from flax import linen as nn
+import matplotlib.pyplot as plt
+from jax import jit, random, vmap
+
+current_dir = Path(__file__).resolve().parent
+project_root = current_dir.parent.parent
+sys.path.append(str(project_root))
+
+from pinn import *
+from examples.ice_melting_sphere.configs import Config as cfg
+
+class PINN(nn.Module):
+
+    def __init__(
+        self,
+        config: object = None,
+    ):
+        super().__init__()
+
+        self.cfg = config
+
+        self.loss_fn_panel = [
+            self.loss_pde,
+            self.loss_ic,
+            # self.loss_irr,
+        ]
+        arch = {"mlp": MLP, "modified_mlp": ModifiedMLP}
+        self.model = arch[self.cfg.ARCH_NAME](
+            act_name=self.cfg.ACT_NAME,
+            num_layers=self.cfg.NUM_LAYERS,
+            hidden_dim=self.cfg.HIDDEN_DIM,
+            out_dim=self.cfg.OUT_DIM,
+            fourier_emb=self.cfg.FOURIER_EMB,
+            emb_scale=self.cfg.EMB_SCALE,
+            emb_dim=self.cfg.EMB_DIM,
+        )
+
+    @partial(jit, static_argnums=(0,))
+    def net_u(self, params, x, t):
+        # phi0 = self.ref_sol_ic(x, t)
+        # return phi0 + self.model.apply(params, x, t) * t
+        return nn.tanh(self.model.apply(params, x, t))
+
+    @partial(jit, static_argnums=(0,))
+    def net_pde(self, params, x, t):
+        phi = self.net_u(params, x, t)
+        dphi_dt = jax.jacrev(self.net_u, argnums=2)(params, x, t)[0]
+        # note, if the `[0]` is not added, the shape of hess_x will be (1, 3, 3)
+        # then the trace will be the sum of all the elements in the matrix
+        # leading to totally wrong results, FUCK!!!
+        hess_x = jax.hessian(self.net_u, argnums=1)(params, x, t)[0]
+        lap_phi = jnp.linalg.trace(hess_x) / self.cfg.Lc**2
+
+        Fphi = 0.25 * (phi**2 - 1) ** 2
+        dFdphi = phi**3 - phi
+
+        pde = (
+            dphi_dt
+            - self.cfg.MM * (lap_phi - dFdphi / self.cfg.EPSILON**2)
+            + self.cfg.LAMBDA * jnp.sqrt(2 * Fphi) / self.cfg.EPSILON
+        )
+        return pde.squeeze()
+
+    @partial(jit, static_argnums=(0,))
+    def ref_sol_ic(self, x, t):
+        r = jnp.sqrt(x[0] ** 2 + x[1] ** 2 + x[2] ** 2) * self.cfg.Lc
+        phi = jnp.tanh((self.cfg.R0 - r) / (jnp.sqrt(2) * self.cfg.EPSILON))
+        phi = jnp.expand_dims(phi, axis=-1)
+        return jax.lax.stop_gradient(phi)
+
+    @partial(jit, static_argnums=(0,))
+    def net_speed(self, params, x, t):
+        dphi_dt = jax.jacrev(self.net_u, argnums=2)(params, x, t)[0]
+        return dphi_dt
+    
+    @partial(jit, static_argnums=(0,))
+    def loss_ic(self, params, batch):
+        x, t = batch
+        u = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
+        ref = vmap(self.ref_sol_ic, in_axes=(0, 0))(x, t)
+        return jnp.mean((u - ref) ** 2)
+
+    @partial(jit, static_argnums=(0,))
+    def loss_irr(self, params, batch):
+        x, t = batch
+        dphi_dt = vmap(self.net_speed, in_axes=(None, 0, 0))(params, x, t)
+        return jnp.mean(jax.nn.relu(dphi_dt))
+    
+    @partial(jit, static_argnums=(0,))
+    def loss_pde(self, params, batch):
+        x, t = batch
+        res = vmap(self.net_pde, in_axes=(None, 0, 0))(params, x, t)
+        return jnp.mean(res**2)
+
+
+    @partial(jit, static_argnums=(0,))
+    def loss_fn(
+        self,
+        params,
+        batch,
+    ):
+        losses = []
+        grads = []
+        for idx, (loss_item_fn, batch_item) in enumerate(
+            zip(self.loss_fn_panel, batch)
+        ):
+            loss_item, grad_item = jax.value_and_grad(loss_item_fn)(params, batch_item)
+            losses.append(loss_item)
+            grads.append(grad_item)
+
+        losses = jnp.array(losses)
+        weights = jnp.array([1.0, 5.0])
+        weights = jax.lax.stop_gradient(weights)
+        return jnp.sum(weights * losses), (losses, weights)
+
+
+def evaluate3D(pinn, params, mesh, ref_path, ts, **kwargs):
+    fig, axes = plt.subplots(
+        2,
+        len(ts),
+        figsize=(3 * len(ts), 10),
+        subplot_kw={"projection": "3d", "box_aspect": (1, 1, 1)},
+    )
+
+    xlim = kwargs.get("xlim", (-0.5, 0.5))
+    ylim = kwargs.get("ylim", (-0.5, 0.5))
+    zlim = kwargs.get("zlim", (-0.5, 0.5))
+    Lc = kwargs.get("Lc", 100)
+    Tc = kwargs.get("Tc", 1.0)
+
+    error = 0
+    mesh /= Lc
+    mesh = mesh[::10]
+
+    for idx, tic in enumerate(ts):
+        t = jnp.ones_like(mesh[:, 0:1]) * tic / Tc
+        pred = vmap(pinn.net_u, in_axes=(None, 0, 0))(params, mesh, t).squeeze()
+
+        ax = axes[0, idx]
+        # interface_idx = jnp.where((pred > 0.05) & (pred < 0.95))[0]
+        interface_idx = jnp.where((pred > -0.5) & (pred < 0.5))[0]
+        ax.scatter(
+            mesh[interface_idx, 0],
+            mesh[interface_idx, 1],
+            mesh[interface_idx, 2],
+            c=pred[interface_idx],
+            cmap="coolwarm",
+            label="phi",
+            vmin=-1,
+            vmax=1,
+        )
+        r_pinn = jnp.sqrt(
+            mesh[interface_idx, 0]**2 
+            + mesh[interface_idx, 1]**2 
+            + mesh[interface_idx, 2]**2
+        ) * Lc
+    
+        ax.set(
+            xlabel="x",
+            ylabel="y",
+            zlabel="z",
+            title=f"t={tic}",
+            xlim=xlim,
+            ylim=ylim,
+            zlim=zlim,
+        )
+        ax.set_axis_off()
+        # reverse z axis
+        ax.invert_zaxis()
+
+        ref_sol = jnp.load(f"{ref_path}/sol-{tic:.4f}.npy")[::10]
+        diff = jnp.abs(pred - ref_sol)
+        interface_idx = jnp.where((diff > 0.05))[0]
+        
+        
+        ax = axes[1, idx]
+        error_bar = ax.scatter(
+            mesh[interface_idx, 0],
+            mesh[interface_idx, 1],
+            mesh[interface_idx, 2],
+            c=jnp.abs(pred[interface_idx] - ref_sol[interface_idx]),
+            cmap="coolwarm",
+            label="error",
+        )
+        
+        
+        ax.set(
+            xlabel="x",
+            ylabel="y",
+            zlabel="z",
+            xlim=xlim,
+            ylim=ylim,
+            zlim=zlim,
+        )
+        # colorbar for error
+        plt.colorbar(error_bar, ax=ax, orientation="horizontal")
+        error += jnp.mean(diff**2)
+
+        ax.set_axis_off()
+        ax.invert_zaxis()
+        
+        interface_idx = jnp.where((ref_sol > -0.5) & (ref_sol < 0.5))[0]
+        r_fem = jnp.sqrt(
+            mesh[interface_idx, 0]**2 
+            + mesh[interface_idx, 1]**2 
+            + mesh[interface_idx, 2]**2
+        ) * Lc
+        r_analytical = cfg.R0 - cfg.LAMBDA * tic
+        
+        ax.text2D(
+            0.05,
+            1.0,
+            f"R_analytical = {r_analytical:.2f}\n"
+            f"R_pinn = {jnp.mean(r_pinn):.2f}\n"
+            f"R_fem = {jnp.mean(r_fem):.2f}",
+            transform=ax.transAxes,
+        )
+        
+    plt.tight_layout()
+    error /= len(ts)
+    return fig, error
+
+
+
+
+class Sampler:
+
+    def __init__(
+        self,
+        n_samples,
+        domain=((-0.4, 0.4), (-0.4, 0.4), (0, 0.4), (0, 1)),
+        key=random.PRNGKey(0),
+        adaptive_kw={
+            "ratio": 10,
+            "num": 5000,
+            "model": None,
+            "state": None,
+        },
+    ):
+        self.n_samples = n_samples
+        self.domain = domain
+        self.adaptive_kw = adaptive_kw
+        self.key = key
+        self.mins = [d[0] for d in domain]
+        self.maxs = [d[1] for d in domain]
+
+    def adaptive_sampling(self, residual_fn):
+        key, self.key = random.split(self.key)
+        adaptive_base = lhs_sampling(
+            self.mins,
+            self.maxs,
+            self.adaptive_kw["num"] * self.adaptive_kw["ratio"],
+            key=key,
+        )
+        residuals = residual_fn(adaptive_base)
+        max_residuals, indices = jax.lax.top_k(
+            jnp.abs(residuals), self.adaptive_kw["num"]
+        )
+        return adaptive_base[indices]
+
+    def sample_pde(self):
+        key, self.key = random.split(self.key)
+        data = shifted_grid(
+            self.mins,
+            self.maxs,
+            [self.n_samples, self.n_samples, self.n_samples, self.n_samples * 2],
+            key,
+        )
+        return data[:, :-1], data[:, -1:]
+
+    def sample_pde_rar(self):
+        key, self.key = random.split(self.key)
+        batch = shifted_grid(
+            self.mins,
+            self.maxs,
+            [self.n_samples, self.n_samples, self.n_samples, self.n_samples * 2],
+            key,
+        )
+
+        def residual_fn(batch):
+            model = self.adaptive_kw["model"]
+            params = self.adaptive_kw["params"]
+            x, t = batch[:, :-1], batch[:, -1:]
+            return vmap(model.net_pde, in_axes=(None, 0, 0))(params, x, t)
+
+        adaptive_sampling = self.adaptive_sampling(residual_fn)
+        data = jnp.concatenate([batch, adaptive_sampling], axis=0)
+        return data[:, :-1], data[:, -1:]
+
+    def sample_ic(self):
+        key, self.key = random.split(self.key)
+        x = lhs_sampling(
+            mins=[self.domain[0][0], self.domain[1][0], self.domain[2][0]],
+            maxs=[self.domain[0][1], self.domain[1][1], self.domain[2][1]],
+            num=10000,
+            key=key,
+        )
+        t = jnp.zeros_like(x[:, 0:1])
+        return x, t
+
+    def sample(self,):
+        return (
+            self.sample_pde(),
+            self.sample_ic(),
+            # self.sample_pde(),
+        )

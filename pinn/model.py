@@ -152,13 +152,15 @@ class PINN(nn.Module):
     def loss_ic(self, params, batch):
         x, t = batch
         u = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
-        return jnp.mean((u - self.ref_sol_ic(x, t)) ** 2)
+        ref = vmap(self.ref_sol_ic, in_axes=(0, 0))(x, t)
+        return jnp.mean((u - ref) ** 2)
 
     @partial(jit, static_argnums=(0,))
     def loss_bc(self, params, batch):
         x, t = batch
         u = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
-        return jnp.mean((u - self.ref_sol_bc(x, t)) ** 2)
+        ref = vmap(self.ref_sol_bc, in_axes=(0, 0))(x, t)
+        return jnp.mean((u - ref) ** 2)
 
     # @partial(jit, static_argnums=(0,))
     # def loss_irr(self, params, batch):
@@ -206,7 +208,7 @@ class PINN(nn.Module):
         losses, grads, aux_vars = self.compute_losses_and_grads(params, batch, eps)
 
         # weights = self.grad_norm_weights(grads)
-        weights = jnp.array([1.0, 100.0])
+        weights = jnp.array([1.0, 1.0])
         weights = jax.lax.stop_gradient(weights)
 
         return jnp.sum(weights * losses), (losses, weights, aux_vars)

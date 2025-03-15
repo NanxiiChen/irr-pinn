@@ -11,7 +11,7 @@ class Dense(nn.Module):
     in_features: int
     out_features: int
     kernel_init: Callable = glorot_normal()
-    bias_init: Callable = zeros
+    bias_init: Callable = normal(0.1)
 
     def setup(self):
         self.kernel = self.param('kernel', self.kernel_init,
@@ -80,11 +80,10 @@ class MLP(nn.Module):
         else:
             x = jnp.concatenate([x, t], axis=-1)
 
-        x = Dense(x.shape[-1], self.hidden_dim)(x)
         for _ in range(self.num_layers - 1):
-            x = Dense(self.hidden_dim, self.hidden_dim)(x)
+            x = Dense(x.shape[-1], self.hidden_dim)(x)
             x = self.act_fn(x)
-        return Dense(self.hidden_dim, self.out_dim)(x)
+        return Dense(x.shape[-1], self.out_dim)(x)
 
 
 
@@ -196,4 +195,4 @@ class ModifiedMLP(nn.Module):
             x = nn.tanh(x)
             x = x * u + (1 - x) * v
 
-        return Dense(self.hidden_dim, self.out_dim)(x)
+        return Dense(x.shape[-1], self.out_dim)(x)

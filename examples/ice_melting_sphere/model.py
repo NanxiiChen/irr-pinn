@@ -29,7 +29,7 @@ class PINN(nn.Module):
         self.loss_fn_panel = [
             self.loss_pde,
             self.loss_ic,
-            # self.loss_irr,
+            self.loss_irr,
         ]
         arch = {"mlp": MLP, "modified_mlp": ModifiedMLP}
         self.model = arch[self.cfg.ARCH_NAME](
@@ -51,7 +51,7 @@ class PINN(nn.Module):
     @partial(jit, static_argnums=(0,))
     def net_pde(self, params, x, t):
         phi = self.net_u(params, x, t)
-        dphi_dt = jax.jacrev(self.net_u, argnums=2)(params, x, t)[0]
+        dphi_dt = jax.jacrev(self.net_u, argnums=2)(params, x, t)[0] / self.cfg.Tc
         # note, if the `[0]` is not added, the shape of hess_x will be (1, 3, 3)
         # then the trace will be the sum of all the elements in the matrix
         # leading to totally wrong results, FUCK!!!
@@ -117,7 +117,7 @@ class PINN(nn.Module):
 
         losses = jnp.array(losses)
         # weights = self.grad_norm_weights(grads)
-        weights = jax.lax.stop_gradient(jnp.array([1.0, 5.0]))
+        weights = jax.lax.stop_gradient(jnp.array([1.0, 1.0, 1.0]))
         return jnp.sum(weights * losses), (losses, weights)
     
     @partial(jit, static_argnums=(0,))
@@ -321,7 +321,7 @@ class Sampler:
 
     def sample(self,):
         return (
-            self.sample_pde(),
+            self.sample_pde_rar(),
             self.sample_ic(),
-            # self.sample_pde(),
+            self.sample_pde(),
         )

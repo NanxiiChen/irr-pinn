@@ -19,8 +19,6 @@ current_dir = Path(__file__).resolve().parent
 project_root = current_dir.parent.parent
 sys.path.append(str(project_root))
 
-
-
 from pinn import MetricsTracker
 from examples.ice_melting_sphere.configs import Config as cfg
 from examples.ice_melting_sphere.model import PINN, Sampler, evaluate3D
@@ -45,9 +43,6 @@ def create_train_state(model, rng, lr, **kwargs):
         params=params,
         tx=optimizer,
     )
-
-
-
 
 
 pinn = PINN(config=cfg)
@@ -134,10 +129,10 @@ for epoch in range(cfg.EPOCHS):
                 "loss/weighted",
                 f"loss/pde",
                 "loss/ic",
-                # "loss/irr",
+                "loss/irr",
                 f"weight/pde",
                 "weight/ic",
-                # "weight/irr",
+                "weight/irr",
                 "error/error",
             ],
             values=[weighted_loss, *loss_components, *weight_components, error],

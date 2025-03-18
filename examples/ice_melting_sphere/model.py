@@ -1,4 +1,3 @@
-
 import sys
 from functools import partial
 from pathlib import Path
@@ -16,11 +15,13 @@ sys.path.append(str(project_root))
 from pinn import *
 from examples.ice_melting_sphere.configs import Config as cfg
 
+
 class PINN(nn.Module):
 
     def __init__(
         self,
         config: object = None,
+        causal_weightor: CausalWeightor = None,
     ):
         super().__init__()
 
@@ -41,6 +42,7 @@ class PINN(nn.Module):
             emb_scale=self.cfg.EMB_SCALE,
             emb_dim=self.cfg.EMB_DIM,
         )
+        self.causal_weightor = causal_weightor
 
     @partial(jit, static_argnums=(0,))
     def net_u(self, params, x, t):
@@ -79,7 +81,7 @@ class PINN(nn.Module):
     def net_speed(self, params, x, t):
         dphi_dt = jax.jacrev(self.net_u, argnums=2)(params, x, t)[0]
         return dphi_dt
-    
+
     @partial(jit, static_argnums=(0,))
     def loss_ic(self, params, batch):
         x, t = batch
@@ -92,13 +94,17 @@ class PINN(nn.Module):
         x, t = batch
         dphi_dt = vmap(self.net_speed, in_axes=(None, 0, 0))(params, x, t)
         return jnp.mean(jax.nn.relu(dphi_dt))
-    
+
     @partial(jit, static_argnums=(0,))
     def loss_pde(self, params, batch):
         x, t = batch
         res = vmap(self.net_pde, in_axes=(None, 0, 0))(params, x, t)
-        return jnp.mean(res**2)
-
+        if not self.cfg.CAUSAL_WEIGHT:
+            return jnp.mean(res**2), {}
+        else:
+            return self.causal_weightor.compute_causal_loss(
+                res, t, self.cfg.CAUSAL_CONFIGS["eps"]
+            )
 
     @partial(jit, static_argnums=(0,))
     def loss_fn(
@@ -111,15 +117,23 @@ class PINN(nn.Module):
         for idx, (loss_item_fn, batch_item) in enumerate(
             zip(self.loss_fn_panel, batch)
         ):
-            loss_item, grad_item = jax.value_and_grad(loss_item_fn)(params, batch_item)
+            if idx == 0:
+                (loss_item, aux), grad_item = jax.value_and_grad(
+                    loss_item_fn, has_aux=True, argnums=0
+                )(params, batch_item)
+            else:
+                loss_item, grad_item = jax.value_and_grad(loss_item_fn)(
+                    params, batch_item
+                )
             losses.append(loss_item)
             grads.append(grad_item)
 
         losses = jnp.array(losses)
-        # weights = self.grad_norm_weights(grads)
-        weights = jax.lax.stop_gradient(jnp.array([1.0, 1.0, 1.0]))
-        return jnp.sum(weights * losses), (losses, weights)
-    
+        weights = self.grad_norm_weights(grads)
+        # weights = weights.at[-1].set(0.0)
+        # weights = jax.lax.stop_gradient(jnp.array([1.0, 1.0, 1.0]))
+        return jnp.sum(weights * losses), (losses, weights, aux)
+
     @partial(jit, static_argnums=(0,))
     def grad_norm_weights(self, grads: list, eps=1e-6):
         def tree_norm(pytree):
@@ -170,12 +184,15 @@ def evaluate3D(pinn, params, mesh, ref_path, ts, **kwargs):
             vmin=-1,
             vmax=1,
         )
-        r_pinn = jnp.sqrt(
-            mesh[interface_idx, 0]**2 
-            + mesh[interface_idx, 1]**2 
-            + mesh[interface_idx, 2]**2
-        ) * Lc
-    
+        r_pinn = (
+            jnp.sqrt(
+                mesh[interface_idx, 0] ** 2
+                + mesh[interface_idx, 1] ** 2
+                + mesh[interface_idx, 2] ** 2
+            )
+            * Lc
+        )
+
         ax.set(
             xlabel="x",
             ylabel="y",
@@ -192,8 +209,7 @@ def evaluate3D(pinn, params, mesh, ref_path, ts, **kwargs):
         ref_sol = jnp.load(f"{ref_path}/sol-{tic:.4f}.npy")[::10]
         diff = jnp.abs(pred - ref_sol)
         interface_idx = jnp.where((diff > 0.05))[0]
-        
-        
+
         ax = axes[1, idx]
         error_bar = ax.scatter(
             mesh[interface_idx, 0],
@@ -203,8 +219,7 @@ def evaluate3D(pinn, params, mesh, ref_path, ts, **kwargs):
             cmap="coolwarm",
             label="error",
         )
-        
-        
+
         ax.set(
             xlabel="x",
             ylabel="y",
@@ -219,15 +234,18 @@ def evaluate3D(pinn, params, mesh, ref_path, ts, **kwargs):
 
         ax.set_axis_off()
         ax.invert_zaxis()
-        
+
         interface_idx = jnp.where((ref_sol > -0.5) & (ref_sol < 0.5))[0]
-        r_fem = jnp.sqrt(
-            mesh[interface_idx, 0]**2 
-            + mesh[interface_idx, 1]**2 
-            + mesh[interface_idx, 2]**2
-        ) * Lc
+        r_fem = (
+            jnp.sqrt(
+                mesh[interface_idx, 0] ** 2
+                + mesh[interface_idx, 1] ** 2
+                + mesh[interface_idx, 2] ** 2
+            )
+            * Lc
+        )
         r_analytical = cfg.R0 - cfg.LAMBDA * tic
-        
+
         ax.text2D(
             0.05,
             1.0,
@@ -236,12 +254,10 @@ def evaluate3D(pinn, params, mesh, ref_path, ts, **kwargs):
             f"R_fem = {jnp.mean(r_fem):.2f}",
             transform=ax.transAxes,
         )
-        
+
     plt.tight_layout()
     error /= len(ts)
     return fig, error
-
-
 
 
 class Sampler:
@@ -319,7 +335,9 @@ class Sampler:
         t = jnp.zeros_like(x[:, 0:1])
         return x, t
 
-    def sample(self,):
+    def sample(
+        self,
+    ):
         return (
             self.sample_pde_rar(),
             self.sample_ic(),

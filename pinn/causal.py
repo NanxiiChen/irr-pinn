@@ -5,12 +5,15 @@ import matplotlib.pyplot as plt
 
 
 class CausalWeightor:
-    def __init__(self, num_chunks: int, t_range: tuple, pde_name="ac"):
+    def __init__(
+        self,
+        num_chunks: int,
+        t_range: tuple,
+    ):
 
         self.num_chunks = num_chunks
         self.t_range = t_range
         self.bins = jnp.linspace(t_range[0], t_range[1], num_chunks + 1)
-        self.pde_name = pde_name
 
     @partial(jax.jit, static_argnums=(0,))
     def compute_causal_weight(self, loss_chunks: jnp.array, eps: jnp.array):
@@ -42,7 +45,7 @@ class CausalWeightor:
             "loss_chunks": loss_chunks,
         }
 
-    def plot_causal_info(self, pde_name, causal_weights, loss_chunks, eps):
+    def plot_causal_info(self, causal_weights, loss_chunks, eps):
 
         bins = (self.bins[1:] + self.bins[:-1]) / 2
 
@@ -53,7 +56,6 @@ class CausalWeightor:
         ax.set(
             xlabel="Time chunks",
             ylabel="Causal weights",
-            title=f"Causal weights for {pde_name}",
         )
 
         ax = axes[1]
@@ -61,7 +63,6 @@ class CausalWeightor:
         ax.set(
             xlabel="Time chunks",
             ylabel="Causal loss",
-            title=f"Causal loss for {pde_name}",
         )
 
         fig.suptitle(f"EPS: {eps:.2e}")
@@ -69,18 +70,23 @@ class CausalWeightor:
         return fig
 
 
-def update_causal_eps(causal_weight, causal_configs, pde_name):
-
+def update_causal_eps(
+    causal_weight,
+    causal_configs,
+):
+    new_causal_configs = causal_configs.copy()
     if (
         causal_weight[-1] > causal_configs["max_last_weight"]
-        and causal_configs[pde_name + "_eps"] < causal_configs["max_eps"]
+        and causal_configs["eps"] < causal_configs["max_eps"]
     ):
-        causal_configs[pde_name + "_eps"] *= causal_configs["step_size"]
-        print(f"Inc. eps to {causal_configs[pde_name + '_eps']}")
+        new_causal_configs["eps"] = causal_configs["eps"] * causal_configs["step_size"]
+        print(f"Inc. eps to {causal_configs['eps']}")
 
     if jnp.mean(causal_weight) < causal_configs["min_mean_weight"]:
-        causal_configs[pde_name + "_eps"] /= causal_configs["step_size"]
-        print(f"Dec. eps to {causal_configs[pde_name + '_eps']}")
+        new_causal_configs["eps"] = causal_configs["eps"] / causal_configs["step_size"]
+        print(f"Dec. eps to {causal_configs['eps']}")
+
+    return new_causal_configs
 
 
 if __name__ == "__main__":

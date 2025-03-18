@@ -14,10 +14,12 @@ jax.config.update("jax_default_matmul_precision", "high")
 
 
 matplotlib.use("Agg")
-RcParams.update({
-    "font.size": 16,
-    "font.sans-serif": ["Arial", "Helvetica"],
-    "font.family": "sans-serif",
-    "xtick.direction": "in",
-    "ytick.direction": "in",
-})
+RcParams.update(
+    {
+        "font.size": 16,
+        "font.sans-serif": ["Arial", "Helvetica"],
+        "font.family": "sans-serif",
+        "xtick.direction": "in",
+        "ytick.direction": "in",
+    }
+)

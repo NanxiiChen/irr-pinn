@@ -1,7 +1,9 @@
 """
 Sharp-PINNs for pitting corrosion with 2d-1pit
 """
+
 import math
+
 
 class Config:
     EPOCHS = 100000
@@ -12,45 +14,42 @@ class Config:
     DECAY = 0.9
     DECAY_EVERY = 1000
     STAGGER_PERIOD = 25
-    EMB_SCALE = (2.0, 0.2) # emb sacle for (x, t)
+    EMB_SCALE = (2.0, 0.5)  # emb sacle for (x, t)
     EMB_DIM = 64
 
-    DOMAIN = ((-0.5, 0.5), (-0.5, 0.5), (-0.5, 0.5), (0, 3.0))
+    DOMAIN = ((-0.5, 0.5), (-0.5, 0.5), (-0.5, 0.5), (0, 1.0))
     DATA_PATH = "./data/ice-melting/"
     LOG_DIR = "/root/tf-logs"
-    PREFIX = "ice-melting"
+    PREFIX = "ice-melting/irr"
     TS = [0.000, 1.0000, 2.0000, 2.8000]
 
     NUM_LAYERS = 4
     HIDDEN_DIM = 64
     OUT_DIM = 1
 
-
     ACT_NAME = "tanh"
     ARCH_NAME = "mlp"
     FOURIER_EMB = True
-    CAUSAL_WEIGHT = False
+    CAUSAL_WEIGHT = True
 
     LAMBDA = 5
     NN = 64
     HH = 100 / NN
-    EPSILON = 6*HH / (2*math.sqrt(2) * math.atanh(0.9))
+    EPSILON = 6 * HH / (2 * math.sqrt(2) * math.atanh(0.9))
     MM = 0.1
     R0 = 35
-
 
     Lc = 100
     Tc = 3.0
     AC_PRE_SCALE = 1e6
     CH_PRE_SCALE = 1e0
 
-
     CAUSAL_CONFIGS = {
-        "eps": 1e-5,
+        "eps": 1e-3,
         "step_size": 10,
         "max_last_weight": 0.99,
         "min_mean_weight": 0.5,
-        "max_eps": 1e0,
+        "max_eps": 1e4,
         "chunks": 24,
     }
 

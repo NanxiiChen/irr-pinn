@@ -19,14 +19,13 @@ current_dir = Path(__file__).resolve().parent
 project_root = current_dir.parent.parent
 sys.path.append(str(project_root))
 
-from pinn import MetricsTracker
+from pinn import MetricsTracker, CausalWeightor, update_causal_eps
 from examples.ice_melting_sphere.configs import Config as cfg
 from examples.ice_melting_sphere.model import PINN, Sampler, evaluate3D
 
 
 # from jax import config
 # config.update("jax_disable_jit", True)
-
 
 
 def create_train_state(model, rng, lr, **kwargs):
@@ -45,7 +44,8 @@ def create_train_state(model, rng, lr, **kwargs):
     )
 
 
-pinn = PINN(config=cfg)
+causal_weightor = CausalWeightor(cfg.CAUSAL_CONFIGS["chunks"], cfg.DOMAIN[-1])
+pinn = PINN(config=cfg, causal_weightor=causal_weightor)
 init_key = random.PRNGKey(0)
 model_key, sampler_key = random.split(init_key)
 state = create_train_state(
@@ -67,32 +67,37 @@ sampler = Sampler(
     },
 )
 
+
 @jit
 def train_step(
     state,
     batch,
 ):
     params = state.params
-    (weighted_loss, (loss_components, weight_components)), grads = jax.value_and_grad(
-        pinn.loss_fn, has_aux=True, argnums=0
-    )(params, batch)
+    (weighted_loss, (loss_components, weight_components, aux)), grads = (
+        jax.value_and_grad(pinn.loss_fn, has_aux=True, argnums=0)(params, batch)
+    )
     new_state = state.apply_gradients(grads=grads)
-    return new_state, (weighted_loss, loss_components, weight_components)
+    return new_state, (weighted_loss, loss_components, weight_components, aux)
+
 
 error = 0
 start_time = time.time()
 for epoch in range(cfg.EPOCHS):
 
-
     if epoch % cfg.STAGGER_PERIOD == 0:
         sampler.adaptive_kw["params"].update(state.params)
         batch = sampler.sample()
 
-    state, (weighted_loss, loss_components, weight_components) = train_step(
+    state, (weighted_loss, loss_components, weight_components, aux) = train_step(
         state,
         batch,
     )
-
+    if cfg.CAUSAL_WEIGHT:
+        new_causal_configs = update_causal_eps(
+            aux["causal_weights"], cfg.CAUSAL_CONFIGS
+        )
+        cfg.CAUSAL_CONFIGS.update(new_causal_configs)
 
     if epoch % cfg.STAGGER_PERIOD == 0:
 
@@ -139,6 +144,15 @@ for epoch in range(cfg.EPOCHS):
         )
         metrics_tracker.register_figure(epoch, fig, "error")
         plt.close(fig)
+
+        if cfg.CAUSAL_WEIGHT:
+            fig = causal_weightor.plot_causal_info(
+                aux["causal_weights"],
+                aux["loss_chunks"],
+                cfg.CAUSAL_CONFIGS["eps"],
+            )
+            metrics_tracker.register_figure(epoch, fig, "causal")
+            plt.close(fig)
 
         metrics_tracker.flush()
 

@@ -1,3 +1,5 @@
+from examples.ice_melting_sphere.configs import Config as cfg
+from pinn import *
 import sys
 from functools import partial
 from pathlib import Path
@@ -6,14 +8,12 @@ import jax
 import jax.numpy as jnp
 from flax import linen as nn
 import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
 from jax import jit, random, vmap
 
 current_dir = Path(__file__).resolve().parent
 project_root = current_dir.parent.parent
 sys.path.append(str(project_root))
-
-from pinn import *
-from examples.ice_melting_sphere.configs import Config as cfg
 
 
 class PINN(nn.Module):
@@ -128,7 +128,8 @@ class PINN(nn.Module):
 
         losses = jnp.array(losses)
         weights = self.grad_norm_weights(grads)
-        # weights = weights.at[-1].set(0.0)
+        if not self.cfg.IRR:
+            weights = weights.at[-1].set(0.0)
         # weights = jax.lax.stop_gradient(jnp.array([1.0, 1.0, 1.0]))
         return jnp.sum(weights * losses), (losses, weights, aux)
 
@@ -148,11 +149,13 @@ class PINN(nn.Module):
 
 
 def evaluate3D(pinn, params, mesh, ref_path, ts, **kwargs):
-    fig, axes = plt.subplots(
-        2,
-        len(ts),
-        figsize=(3 * len(ts), 10),
-        subplot_kw={"projection": "3d", "box_aspect": (1, 1, 1)},
+    fig = plt.figure(figsize=(3 * len(ts), 8))
+    gs = GridSpec(
+        4,
+        len(ts) + 1,
+        width_ratios=[0.1] + [1] * len(ts),
+        height_ratios=[1, 1, 1, 0.3],
+        figure=fig,
     )
 
     xlim = kwargs.get("xlim", (-0.5, 0.5))
@@ -165,13 +168,27 @@ def evaluate3D(pinn, params, mesh, ref_path, ts, **kwargs):
     mesh /= Lc
     mesh = mesh[::10]
 
+    row_names = ["PINN", "FEM", "Error"]
+    for idx, row_name in enumerate(row_names):
+        ax = fig.add_subplot(gs[idx, 0])
+        # put row name on the left vertical axis
+        ax.text(
+            0.5,
+            0.5,
+            row_name,
+            transform=ax.transAxes,
+            rotation=90,
+            ha="center",
+            va="center",
+        )
+        ax.set_axis_off()
+
     for idx, tic in enumerate(ts):
         t = jnp.ones_like(mesh[:, 0:1]) * tic / Tc
         pred = vmap(pinn.net_u, in_axes=(None, 0, 0))(params, mesh, t).squeeze()
 
-        ax = axes[0, idx]
-        # interface_idx = jnp.where((pred > 0.05) & (pred < 0.95))[0]
-        interface_idx = jnp.where((pred > -0.5) & (pred < 0.5))[0]
+        ax = fig.add_subplot(gs[0, idx + 1], projection="3d", box_aspect=(1, 1, 1))
+        interface_idx = (pred > -0.5) & (pred < 0.5)
         ax.scatter(
             mesh[interface_idx, 0],
             mesh[interface_idx, 1],
@@ -201,14 +218,35 @@ def evaluate3D(pinn, params, mesh, ref_path, ts, **kwargs):
             zlim=zlim,
         )
         ax.set_axis_off()
-        # reverse z axis
         ax.invert_zaxis()
 
         ref_sol = jnp.load(f"{ref_path}/sol-{tic:.4f}.npy")[::10]
         diff = jnp.abs(pred - ref_sol)
-        interface_idx = jnp.where((diff > 0.05))[0]
 
-        ax = axes[1, idx]
+        ax = fig.add_subplot(gs[1, idx + 1], projection="3d", box_aspect=(1, 1, 1))
+        interface_idx = (ref_sol > -0.5) & (ref_sol < 0.5)
+        ax.scatter(
+            mesh[interface_idx, 0],
+            mesh[interface_idx, 1],
+            mesh[interface_idx, 2],
+            c=ref_sol[interface_idx],
+            cmap="coolwarm",
+            label="phi",
+            vmin=-1,
+            vmax=1,
+        )
+        ax.set(
+            xlabel="x",
+            ylabel="y",
+            zlabel="z",
+            xlim=xlim,
+            ylim=ylim,
+            zlim=zlim,
+        )
+        ax.set_axis_off()
+
+        ax = fig.add_subplot(gs[2, idx + 1], projection="3d", box_aspect=(1, 1, 1))
+        interface_idx = diff > 0.05
         error_bar = ax.scatter(
             mesh[interface_idx, 0],
             mesh[interface_idx, 1],
@@ -226,8 +264,6 @@ def evaluate3D(pinn, params, mesh, ref_path, ts, **kwargs):
             ylim=ylim,
             zlim=zlim,
         )
-        # colorbar for error
-        plt.colorbar(error_bar, ax=ax, orientation="horizontal")
         error += jnp.mean(diff**2)
 
         ax.set_axis_off()
@@ -246,14 +282,19 @@ def evaluate3D(pinn, params, mesh, ref_path, ts, **kwargs):
 
         ax.text2D(
             0.05,
-            1.0,
+            -0.2,
             f"R_analytical = {r_analytical:.2f}\n"
             f"R_pinn = {jnp.mean(r_pinn):.2f}\n"
             f"R_fem = {jnp.mean(r_fem):.2f}",
             transform=ax.transAxes,
+            ha="left",
+            va="bottom",
         )
 
-    plt.tight_layout()
+        ax = fig.add_subplot(gs[3, idx + 1])
+        fig.colorbar(error_bar, ax=ax, orientation="horizontal")
+        ax.set_axis_off()
+
     error /= len(ts)
     return fig, error
 

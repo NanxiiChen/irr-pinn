@@ -21,7 +21,7 @@ class Config:
     DATA_PATH = "./data/ice-melting/"
     LOG_DIR = "/root/tf-logs"
     PREFIX = "ice-melting/irr"
-    TS = [0.000, 1.0000, 2.0000, 2.8000]
+    TS = [0.000, 1.0000, 2.0000, 2.5000]
 
     NUM_LAYERS = 4
     HIDDEN_DIM = 64
@@ -30,7 +30,8 @@ class Config:
     ACT_NAME = "tanh"
     ARCH_NAME = "mlp"
     FOURIER_EMB = True
-    CAUSAL_WEIGHT = False
+    CAUSAL_WEIGHT = True
+    IRR = True
 
     LAMBDA = 5
     NN = 64
@@ -40,7 +41,7 @@ class Config:
     R0 = 35
 
     Lc = 100
-    Tc = 3.0
+    Tc = 2.5
     AC_PRE_SCALE = 1e6
     CH_PRE_SCALE = 1e0
 

@@ -19,7 +19,6 @@ from pinn import CausalWeightor, MetricsTracker
 # config.update("jax_disable_jit", True)
 
 
-
 causal_weightor = CausalWeightor(cfg.CAUSAL_CONFIGS["chunks"], cfg.DOMAIN[-1])
 pinn = PINN(config=cfg, causal_weightor=causal_weightor)
 init_key = random.PRNGKey(0)
@@ -44,8 +43,6 @@ sampler = Sampler(
 )
 
 
-
-
 error = 0
 start_time = time.time()
 for epoch in range(cfg.EPOCHS):
@@ -54,11 +51,13 @@ for epoch in range(cfg.EPOCHS):
         sampler.adaptive_kw["params"].update(state.params)
         batch = sampler.sample()
 
-    state, (weighted_loss, loss_components, weight_components, aux) = train_step(
-        state,
-        batch,
-        cfg.CAUSAL_CONFIGS["eps"],
-        pinn.loss_fn,
+    state, (weighted_loss, loss_components, weight_components, aux) = (
+        train_step(
+            pinn.loss_fn,
+            state,
+            batch,
+            cfg.CAUSAL_CONFIGS["eps"],
+        )
     )
     if cfg.CAUSAL_WEIGHT:
         cfg.CAUSAL_CONFIGS.update(

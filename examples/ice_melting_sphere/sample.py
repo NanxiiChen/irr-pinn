@@ -45,7 +45,7 @@ class Sampler:
         data = shifted_grid(
             self.mins,
             self.maxs,
-            [self.n_samples, self.n_samples, self.n_samples, self.n_samples * 3],
+            [self.n_samples, self.n_samples, self.n_samples, self.n_samples*3],
             key,
         )
         return data[:, :-1], data[:, -1:]
@@ -81,12 +81,29 @@ class Sampler:
         t = jnp.zeros_like(x[:, 0:1])
         return x, t
 
-    def sample(self):
-        return (
-            self.sample_pde_rar(),
+    def sample(self, num_batch=None):
+        data = (
+            self.sample_pde(),
             self.sample_ic(),
             self.sample_pde(),
         )
+        if num_batch is None:
+            return data
+
+
+        batched_data = []
+        for batch in data:
+            x, t = batch
+            # 使用array_split可以处理不能整除的情况
+            x_batches = jnp.array_split(x, num_batch)[:num_batch]
+            t_batches = jnp.array_split(t, num_batch)[:num_batch]
+            batched_data.append(list(zip(x_batches, t_batches)))
+        
+        # 转置操作：将按数据类型组织的批次变成按批次编号组织的数据类型
+        transposed_batched_data = list(zip(*batched_data))
+        return transposed_batched_data
+                    
+            
         
             
 

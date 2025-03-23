@@ -10,10 +10,11 @@ class Config:
     N_SAMPLES = 20
     ADAPTIVE_SAMPLES = 8000
     ADAPTIVE_BASE_RATE = 5
-    MAX_BATCH_SIZE = 5000
+    # MAX_BATCH_SIZE = 5000
+    NUM_BATCH = 10
     LR = 5e-4
     DECAY = 0.9
-    DECAY_EVERY = 1000
+    DECAY_EVERY = 200
     STAGGER_PERIOD = 25
     EMB_SCALE = (2.0, 0.2)  # emb sacle for (x, t)
     EMB_DIM = 64

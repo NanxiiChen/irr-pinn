@@ -22,7 +22,7 @@ class Config:
     DOMAIN = ((-0.5, 0.5), (-0.5, 0.5), (-0.5, 0.5), (0, 1.0))
     DATA_PATH = "./data/ice-melting/"
     LOG_DIR = "/root/tf-logs"
-    PREFIX = "ice-melting/noirr"
+    PREFIX = "ice-melting/irr"
     TS = [0.000, 2.0000, 4.000, 5.000]
 
     NUM_LAYERS = 4

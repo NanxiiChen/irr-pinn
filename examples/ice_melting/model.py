@@ -64,10 +64,8 @@ class PINN(nn.Module):
 
     @partial(jit, static_argnums=(0,))
     def ref_sol_ic(self, x, t):
-        r = jnp.sqrt(x[0] ** 2 + x[1] ** 2 + x[2] ** 2) * self.cfg.Lc
-        phi = jnp.tanh((self.cfg.R0 - r) / (jnp.sqrt(2) * self.cfg.EPSILON))
-        phi = jnp.expand_dims(phi, axis=-1)
-        return jax.lax.stop_gradient(phi)
+        raise NotImplementedError
+
 
     @partial(jit, static_argnums=(0,))
     def net_speed(self, params, x, t):

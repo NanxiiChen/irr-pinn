@@ -1,16 +1,20 @@
 import datetime
 import sys
 import time
+from functools import partial
 from pathlib import Path
 
+import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import orbax.checkpoint as ocp
-from jax import random
+from jax import jit, random
 
 current_dir = Path(__file__).resolve().parent
 project_root = current_dir.parent.parent
 sys.path.append(str(project_root))
+
+
 
 from examples.ice_melting import *
 from pinn import CausalWeightor, MetricsTracker
@@ -19,8 +23,24 @@ from pinn import CausalWeightor, MetricsTracker
 # config.update("jax_disable_jit", True)
 
 
+class IceMeltingPINN(PINN):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @partial(jit, static_argnums=(0,))
+    def ref_sol_ic(self, x, t):
+        r = jnp.sqrt(x[0] ** 2 + x[1] ** 2 + x[2] ** 2) * self.cfg.Lc
+        phi = jnp.tanh((self.cfg.R0 - r) / (jnp.sqrt(2) * self.cfg.EPSILON))
+        phi = jnp.expand_dims(phi, axis=-1)
+        return jax.lax.stop_gradient(phi)
+
+
+
 causal_weightor = CausalWeightor(cfg.CAUSAL_CONFIGS["chunks"], cfg.DOMAIN[-1])
-pinn = PINN(config=cfg, causal_weightor=causal_weightor)
+pinn = IceMeltingPINN(config=cfg, causal_weightor=causal_weightor)
+
+
 init_key = random.PRNGKey(0)
 model_key, sampler_key = random.split(init_key)
 state = create_train_state(

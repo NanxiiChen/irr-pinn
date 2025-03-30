@@ -39,37 +39,90 @@ class PINN(nn.Module):
 
     @partial(jit, static_argnums=(0,))
     def net_u(self, params, x, t):
-        # phi0 = self.ref_sol_ic(x, t)
-        # return phi0 + self.model.apply(params, x, t) * t
-        return nn.tanh(self.model.apply(params, x, t))
+
+        def hard_cons(params, x, t):
+            phi, cl = nn.tanh(self.model.apply(params, x, t)) / 2 + 0.5
+            cl = cl * (1 - self.cfg.CSE + self.cfg.CLE)
+            c = (self.cfg.CSE - self.cfg.CLE) * (-2 * phi**3 + 3 * phi**2) + cl
+            return jnp.stack([phi, c], axis=0)
+
+        return hard_cons(params, x, t)
+
 
     @partial(jit, static_argnums=(0,))
-    def net_pde(self, params, x, t):
-        phi = self.net_u(params, x, t)
-        dphi_dt = jax.jacrev(self.net_u, argnums=2)(params, x, t)[0] / self.cfg.Tc
-        # note, if the `[0]` is not added, the shape of hess_x will be (1, 3, 3)
-        # then the trace will be the sum of all the elements in the matrix
-        # leading to totally wrong results, FUCK!!!
-        hess_x = jax.hessian(self.net_u, argnums=1)(params, x, t)[0]
-        lap_phi = jnp.linalg.trace(hess_x) / self.cfg.Lc**2
+    def net_ac(self, params, x, t):
+        AC1 = 2 * self.cfg.AA * self.cfg.LP * self.cfg.Tc
+        AC2 = self.cfg.LP * self.cfg.OMEGA_PHI * self.cfg.Tc
+        AC3 = self.cfg.LP * self.cfg.ALPHA_PHI * self.cfg.Tc / self.cfg.Lc**2
 
-        Fphi = 0.25 * (phi**2 - 1) ** 2
-        dFdphi = phi**3 - phi
+        # self.net_u : (x, t) --> (phi, c)
+        phi, c = self.net_u(params, x, t)
+        h_phi = -2 * phi**3 + 3 * phi**2
+        dh_dphi = -6 * phi**2 + 6 * phi
+        dg_dphi = 4 * phi**3 - 6 * phi**2 + 2 * phi
 
-        pde = (
+        jac_phi_t = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0], argnums=1)
+        dphi_dt = jac_phi_t(x, t)[0]
+
+        hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0], argnums=0)
+        lap_phi = jnp.linalg.trace(hess_phi_x(x, t))
+
+        ac = (
             dphi_dt
-            - self.cfg.MM * (lap_phi - dFdphi / self.cfg.EPSILON**2)
-            + self.cfg.LAMBDA * jnp.sqrt(2 * Fphi) / self.cfg.EPSILON
+            - AC1
+            * (c - h_phi * (self.cfg.CSE - self.cfg.CLE) - self.cfg.CLE)
+            * (self.cfg.CSE - self.cfg.CLE)
+            * dh_dphi
+            + AC2 * dg_dphi
+            - AC3 * lap_phi
         )
-        return pde.squeeze()
+        return ac / self.cfg.AC_PRE_SCALE
+
+    @partial(jit, static_argnums=(0,))
+    def net_ch(self, params, x, t):
+        CH1 = 2 * self.cfg.AA * self.cfg.MM * self.cfg.Tc / self.cfg.Lc**2
+
+        # self.net_u : (x, t) --> (phi, c)
+        phi, c = self.net_u(params, x, t)
+
+        jac_phi_x = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0], argnums=0)
+        nabla_phi = jac_phi_x(x, t)
+
+        jac_c_t = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1], argnums=1)
+        dc_dt = jac_c_t(x, t)[0]
+
+        # hess_phi_x, hess_c_x = jax.hessian(self.net_u, argnums=(1))(params, x, t)
+
+        # hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0], argnums=0)(x, t)
+        # hess_c_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(x, t)
+        hess_phi_x, hess_c_x = jax.hessian(self.net_u, argnums=(1))(params, x, t)
+
+        lap_phi = jnp.linalg.trace(hess_phi_x)
+        lap_c = jnp.linalg.trace(hess_c_x)
+
+        lap_h_phi = 6 * (
+            phi * (1 - phi) * lap_phi + (1 - 2 * phi) * jnp.sum(nabla_phi**2)
+        )
+
+        ch = dc_dt - CH1 * lap_c + CH1 * (self.cfg.CSE - self.cfg.CLE) * lap_h_phi
+
+        return ch / self.cfg.CH_PRE_SCALE
+    
+
+    @partial(jit, static_argnums=(0,))
+    def net_speed(self, params, x, t):
+        jac_dt = jax.jacrev(self.net_u, argnums=2)
+        dphi_dt, dc_dt = jac_dt(params, x, t)
+        return dphi_dt, dc_dt
+
 
     @partial(jit, static_argnums=(0,))
     def ref_sol_ic(self, x, t):
-        r = jnp.sqrt(x[0] ** 2 + x[1] ** 2 + x[2] ** 2) * self.cfg.Lc
-        phi = jnp.tanh((self.cfg.R0 - r) / (jnp.sqrt(2) * self.cfg.EPSILON))
-        phi = jnp.expand_dims(phi, axis=-1)
-        return jax.lax.stop_gradient(phi)
+        raise NotImplementedError
 
+    @partial(jit, static_argnums=(0,))
+    def ref_sol_bc(self, x, t):
+        raise NotImplementedError
 
     @partial(jit, static_argnums=(0,))
     def net_speed(self, params, x, t):

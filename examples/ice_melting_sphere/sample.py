@@ -83,7 +83,7 @@ class Sampler:
 
     def sample(self, num_batch=None):
         data = (
-            self.sample_pde(),
+            self.sample_pde_rar(),
             self.sample_ic(),
             self.sample_pde(),
         )

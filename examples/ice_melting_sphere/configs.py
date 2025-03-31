@@ -9,7 +9,7 @@ class Config:
     EPOCHS = 100000
     N_SAMPLES = 20
     ADAPTIVE_SAMPLES = 8000
-    ADAPTIVE_BASE_RATE = 5
+    ADAPTIVE_BASE_RATE = 10
     # MAX_BATCH_SIZE = 5000
     NUM_BATCH = 10
     LR = 5e-4
@@ -22,7 +22,7 @@ class Config:
     DOMAIN = ((-0.5, 0.5), (-0.5, 0.5), (-0.5, 0.5), (0, 1.0))
     DATA_PATH = "./data/ice-melting/"
     LOG_DIR = "/root/tf-logs"
-    PREFIX = "ice-melting/irr"
+    PREFIX = "ice-melting/noirr"
     TS = [0.000, 2.0000, 4.000, 5.000]
 
     NUM_LAYERS = 4
@@ -33,7 +33,7 @@ class Config:
     ARCH_NAME = "mlp"
     FOURIER_EMB = True
     CAUSAL_WEIGHT = True
-    IRR = True
+    IRR = False
 
     LAMBDA = 5
     NN = 64

@@ -176,9 +176,9 @@ for epoch in range(cfg.EPOCHS):
 
         if cfg.CAUSAL_WEIGHT:
             fig = pinn.causal_weightor.plot_causal_info(
-                pde_name,
                 aux_vars["causal_weights"],
                 aux_vars["loss_chunks"],
+                cfg.CAUSAL_CONFIGS["eps"],
             )
             metrics_tracker.register_figure(epoch, fig, "causal_info")
             plt.close(fig)

@@ -42,3 +42,4 @@ $$
 
 ![Ice Melting](../../figures/icemelting-radius.png)
 ![Ice Melting](../../figures/icemelting-sol.png)
+![Ice Melting](../../figures/icemelting-error-log.png)

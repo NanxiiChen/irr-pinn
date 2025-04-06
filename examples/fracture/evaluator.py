@@ -13,8 +13,8 @@ def evaluate2D(pinn, params, mesh, ref_path, ts, **kwargs):
     vmin, vmax = kwargs.get("val_range", (0, 1))
     xlim = kwargs.get("xlim", (-0.5, 0.5))
     ylim = kwargs.get("ylim", (0, 0.5))
-    Lc = kwargs.get("Lc", 1e-4)
-    Tc = kwargs.get("Tc", 10.0)
+    Lc = kwargs.get("Lc", 1.0)
+    Tc = kwargs.get("Tc", 1.0)
     error = 0
     mesh /= Lc
     for idx, tic in enumerate(ts):
@@ -39,7 +39,7 @@ def evaluate2D(pinn, params, mesh, ref_path, ts, **kwargs):
             aspect="equal",
         )
 
-        ref_sol = jnp.load(f"{ref_path}/sol-{tic:.3f}.npy")[:, 0:1]
+        ref_sol = jnp.load(f"{ref_path}/phi-{tic:.3f}.npy")
 
         ax = plt.subplot(gs[idx, 1])
         error_bar = ax.scatter(

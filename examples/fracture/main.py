@@ -5,13 +5,12 @@ Sharp-PINNs for pitting corrosion with 2d-1pit
 import datetime
 import sys
 import time
-from functools import partial
 from pathlib import Path
 
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
-from jax import jit, random
+from jax import random, vmap
 import orbax.checkpoint as ocp
 
 current_dir = Path(__file__).resolve().parent
@@ -20,7 +19,7 @@ sys.path.append(str(project_root))
 
 from examples.fracture import (
     PINN,
-    Sampler,
+    FractureSampler,
     evaluate2D,
     cfg,
 )
@@ -33,51 +32,73 @@ from pinn import (
 )
 
 
-class PFPINN(PINN):
+class FracturePINN(PINN):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.loss_fn_panel = [
             self.loss_pde,
             self.loss_ic,
             self.loss_bc,
-            self.loss_flux,
             self.loss_irr,
         ]
         self.flux_idx = 1
 
-    @partial(jit, static_argnums=(0,))
-    def ref_sol_bc(self, x, t):
-        # x: (x1, x2)
-        r = jnp.sqrt(x[0] ** 2 + x[1] ** 2)
-        phi = (r > 0.05).astype(jnp.float32)
-        c = phi.copy()
-        sol = jnp.stack([phi, c], axis=-1)
+    def ref_sol_bc_top(self, x, t):
+        # uy = ur * t
+        uy = self.cfg.UR * t[0]
+        # no bc applied on ux top, here we use 0 as placeholder
+        return jax.lax.stop_gradient(jnp.array([0.0, 0.0, uy]))
+
+    def ref_sol_bc_bottom(self, x, t):
+        return jax.lax.stop_gradient(jnp.array([0.0, 0.0, 0.0]))
+
+    def ref_sol_bc_crack(self, x, t):
+        # phi = exp(-|y| / l)
+        phi = jnp.exp(-jnp.abs(x[1] / self.cfg.L))
+        return jax.lax.stop_gradient(phi)
+
+    def ref_sol_ic(self, x, t):
+        # if y > 0, phi = 0
+        # elif y < 0, phi = exp(-|y| / l)
+        # ux = 0, uy = 0
+        phi = jnp.exp(-jnp.abs(x[1] / self.cfg.L)) * jnp.where(x[1] < 0, 1, 0)
+        sol = jnp.stack([phi, 0.0, 0.0], axis=-1)
         return jax.lax.stop_gradient(sol)
 
-    @partial(jit, static_argnums=(0,))
-    def ref_sol_ic(self, x, t):
-        r = jnp.sqrt(x[0] ** 2 + x[1] ** 2)
-        phi = (
-            1
-            - (
-                1
-                - jnp.tanh(
-                    jnp.sqrt(cfg.OMEGA_PHI)
-                    / jnp.sqrt(2 * cfg.ALPHA_PHI)
-                    * (r - 0.05)
-                    * cfg.Lc
-                )
-            )
-            / 2
-        )
-        h_phi = -2 * phi**3 + 3 * phi**2
-        c = h_phi * cfg.CSE + (1 - h_phi) * 0.0
-        sol = jnp.stack([phi, c], axis=-1)
-        return jax.lax.stop_gradient(sol)
+    def loss_ic(self, params, batch):
+        x, t = batch
+        phi, disp = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
+        sol = jnp.stack([phi[:, 0], disp[:, 0], disp[:, 1]], axis=-1)
+        ref = vmap(self.ref_sol_ic, in_axes=(0, 0))(x, t)
+        return jnp.mean((sol - ref) ** 2)
+
+    def loss_bc(self, params, batch):
+
+        x, t = batch["bottom"]
+        phi, disp = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
+        sol = jnp.stack([phi[:, 0], disp[:, 0], disp[:, 1]], axis=-1)
+        ref = vmap(self.ref_sol_bc_bottom, in_axes=(0, 0))(x, t)
+        bottom = jnp.mean((sol - ref) ** 2)
+
+        x, t = batch["top"]
+        phi, disp = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
+        uy = disp[:, 1]
+        ref = vmap(self.ref_sol_bc_top, in_axes=(0, 0))(x, t)
+        top = jnp.mean((phi - ref[:, 0]) ** 2) + jnp.mean((uy - ref[:, 2]) ** 2)
+
+        x, t = batch["crack"]
+        phi = vmap(
+            lambda x, t: self.net_u(params, x, t)[0],
+            in_axes=(0, 0),
+        )(x, t)
+        ref = vmap(self.ref_sol_bc_crack, in_axes=(0, 0))(x, t)
+        crack = jnp.mean((phi - ref) ** 2)
+
+        return bottom + top + crack
 
 
 causal_weightor = CausalWeightor(cfg.CAUSAL_CONFIGS["chunks"], cfg.DOMAIN[-1])
-pinn = PFPINN(config=cfg, causal_weightor=causal_weightor)
+pinn = FracturePINN(config=cfg, causal_weightor=causal_weightor)
 
 init_key = random.PRNGKey(0)
 model_key, sampler_key = random.split(init_key)
@@ -93,43 +114,40 @@ now = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 log_path = f"{cfg.LOG_DIR}/{cfg.PREFIX}/{now}"
 metrics_tracker = MetricsTracker(log_path)
 ckpt = ocp.StandardCheckpointer()
-sampler = Sampler(
+sampler = FractureSampler(
     cfg.N_SAMPLES,
     domain=cfg.DOMAIN,
     key=sampler_key,
     adaptive_kw={
         "ratio": cfg.ADAPTIVE_BASE_RATE,
-        "model": pinn,
-        "params": state.params,
         "num": cfg.ADAPTIVE_SAMPLES,
     },
 )
 
-stagger = StaggerSwitch(pde_names=["ac", "ch"], stagger_period=cfg.STAGGER_PERIOD)
+stagger = StaggerSwitch(pde_names=["stress", "pf"], stagger_period=cfg.STAGGER_PERIOD)
 
 start_time = time.time()
 for epoch in range(cfg.EPOCHS):
     pde_name = stagger.decide_pde()
-    loss_fn = pinn.loss_fn_ac if pde_name == "ac" else pinn.loss_fn_ch
+    loss_fn = pinn.loss_fn_stress if pde_name == "stress" else pinn.loss_fn_pf
 
     if epoch % cfg.STAGGER_PERIOD == 0:
-        sampler.adaptive_kw["params"].update(state.params)
-        batch = sampler.sample(pde_name=pde_name)
-        print(f"Epoch: {epoch}, PDE: {pde_name}")
+        batch = sampler.sample(fns=[pinn.net_stress, pinn.net_pf], params=state.params)
 
     state, (weighted_loss, loss_components, weight_components, aux_vars) = train_step(
         loss_fn,
         state,
         batch,
-        cfg.CAUSAL_CONFIGS["eps"],
+        cfg.CAUSAL_CONFIGS[f"{pde_name}_eps"],
     )
     if cfg.CAUSAL_WEIGHT:
-        cfg.CAUSAL_CONFIGS.update(
-            causal_weightor.update_causal_eps(
-                aux_vars["causal_weights"],
-                cfg.CAUSAL_CONFIGS,
-            )
+        new_eps = causal_weightor.update_causal_eps(
+            cfg.CAUSAL_CONFIGS[f"{pde_name}_eps"],
+            aux_vars["causal_weights"],
+            cfg.CAUSAL_CONFIGS,
         )
+        cfg.CAUSAL_CONFIGS.update({f"{pde_name}_eps": new_eps})
+
     stagger.step_epoch()
 
     if epoch % cfg.STAGGER_PERIOD == 0:
@@ -161,12 +179,10 @@ for epoch in range(cfg.EPOCHS):
                 f"loss/{pde_name}",
                 "loss/ic",
                 "loss/bc",
-                "loss/flux",
                 "loss/irr",
                 f"weight/{pde_name}",
                 "weight/ic",
                 "weight/bc",
-                "weight/flux",
                 "weight/irr",
                 "error/error",
             ],
@@ -179,8 +195,9 @@ for epoch in range(cfg.EPOCHS):
             fig = pinn.causal_weightor.plot_causal_info(
                 aux_vars["causal_weights"],
                 aux_vars["loss_chunks"],
-                cfg.CAUSAL_CONFIGS["eps"],
+                cfg.CAUSAL_CONFIGS[f"{pde_name}_eps"],
             )
+            fig.suptitle(f"{pde_name}_eps: {cfg.CAUSAL_CONFIGS[f'{pde_name}_eps']:.2e}")
             metrics_tracker.register_figure(epoch, fig, "causal_info")
             plt.close(fig)
 

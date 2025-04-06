@@ -37,16 +37,23 @@ class PINN(nn.Module):
         )
         self.causal_weightor = causal_weightor
 
-        self.loss_fn_ac = partial(self.loss_fn, pde_name="ac")
-        self.loss_fn_ch = partial(self.loss_fn, pde_name="ch")
+        self.loss_fn_stress = partial(self.loss_fn, pde_name="stress")
+        self.loss_fn_pf = partial(self.loss_fn, pde_name="pf")
 
     @partial(jit, static_argnums=(0,))
     def net_u(self, params, x, t):
         # x: (d,), t: (1,)
         # phi: scalar, disp: (d,)
-        phi, *disp = self.model.apply(params, x, t)
-        phi = nn.tanh(phi) / 2 + 0.5
+        sol = self.model.apply(params, x, t)
+        phi, disp = jnp.split(
+            sol,
+            [
+                1,
+            ],
+            axis=-1,
+        )
         disp = disp / self.cfg.DISP_PRE_SCALE
+        phi = nn.tanh(phi) / 2 + 0.5
         return phi, disp
 
     def epsilon(self, params, x, t):
@@ -61,30 +68,34 @@ class PINN(nn.Module):
         # sigma: (d, d)
         return 2.0 * self.cfg.MU * self.epsilon(
             params, x, t
-        ) + self.cfg.LMBDA * jnp.trace(self.epsilon(params, x, t)) * jnp.eye(
+        ) + self.cfg.LAMBDA * jnp.trace(self.epsilon(params, x, t)) * jnp.eye(
             x.shape[-1]
         )
 
     def psi(self, params, x, t):
         # psi: scalar
         epsilon = self.epsilon(params, x, t)
-        return self.cfg.LMBDA * jnp.trace(epsilon) ** 2 / 2 + self.cfg.MU * jnp.sum(
+        return self.cfg.LAMBDA * jnp.trace(epsilon) ** 2 / 2 + self.cfg.MU * jnp.sum(
             epsilon**2
         )
 
     @partial(jit, static_argnums=(0,))
-    def net_balance(self, params, x, t):
+    def net_stress(self, params, x, t):
         # $$ (1 - \phi) **2 \nabla \cdot \sigma = 0 $$
         phi, disp = self.net_u(params, x, t)
-        # 求应力张量的散度
-        jac_sigma_x = jax.jacrev(self.sigma, argnums=0)(params, x, t)
-        div_sigma = jnp.sum(jac_sigma_x, axis=-1)
-        
-        balance = (1 - phi) ** 2 * div_sigma
-        
-        return balance
-    
-    
+        # 求应力张量的散度: div_sigma = \nabla\cdot\sigma
+        # sigma: [[sigma_xx, sigma_xy], [sigma_yx, sigma_yy]]
+        # div_sigma:[partial sigma_xx / partial x + partial sigma_xy / partial y, \
+        #           partial sigma_yx / partial x + partial sigma_yy / partial y]]
+
+        jac_sigma_x = jax.jacrev(self.sigma, argnums=1)(params, x, t)
+        div_sigma = jnp.sum(jnp.diagonal(jac_sigma_x, axis1=0, axis2=2), axis=0)
+
+        stress = (1 - phi) ** 2 * div_sigma
+        stress = jnp.sum(jnp.abs(stress), axis=-1)
+
+        return stress / self.cfg.STRESS_PRE_SCALE
+
     @partial(jit, static_argnums=(0,))
     def net_pf(self, params, x, t):
         phi, disp = self.net_u(params, x, t)
@@ -92,85 +103,20 @@ class PINN(nn.Module):
             x, t
         )
         lap_phi = jnp.linalg.trace(hess_phi_x)
+
+        pf = self.cfg.GC * (phi / self.cfg.L - self.cfg.L * lap_phi) - 2 * (
+            1 - phi
+        ) * self.psi(params, x, t)
         
-        pf = (
-            self.cfg.GC * (phi / self.cfg.L - self.cfg.L * lap_phi)
-            - 2 * (1 - phi) * self.psi(params, x, t)
-        ) 
-        return pf
-        
-        
-        
-        
-        
-
-    @partial(jit, static_argnums=(0,))
-    def net_ac(self, params, x, t):
-        AC1 = 2 * self.cfg.AA * self.cfg.LP * self.cfg.Tc
-        AC2 = self.cfg.LP * self.cfg.OMEGA_PHI * self.cfg.Tc
-        AC3 = self.cfg.LP * self.cfg.ALPHA_PHI * self.cfg.Tc / self.cfg.Lc**2
-
-        # self.net_u : (x, t) --> (phi, c)
-        phi, c = self.net_u(params, x, t)
-        h_phi = -2 * phi**3 + 3 * phi**2
-        dh_dphi = -6 * phi**2 + 6 * phi
-        dg_dphi = 4 * phi**3 - 6 * phi**2 + 2 * phi
-
-        jac_phi_t = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0], argnums=1)
-        dphi_dt = jac_phi_t(x, t)[0]
-
-        hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0], argnums=0)
-        lap_phi = jnp.linalg.trace(hess_phi_x(x, t))
-
-        ac = (
-            dphi_dt
-            - AC1
-            * (c - h_phi * (self.cfg.CSE - self.cfg.CLE) - self.cfg.CLE)
-            * (self.cfg.CSE - self.cfg.CLE)
-            * dh_dphi
-            + AC2 * dg_dphi
-            - AC3 * lap_phi
-        )
-        return ac / self.cfg.AC_PRE_SCALE
-
-    @partial(jit, static_argnums=(0,))
-    def net_ch(self, params, x, t):
-        CH1 = 2 * self.cfg.AA * self.cfg.MM * self.cfg.Tc / self.cfg.Lc**2
-
-        # self.net_u : (x, t) --> (phi, c)
-        phi, c = self.net_u(params, x, t)
-
-        jac_phi_x = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0], argnums=0)
-        nabla_phi = jac_phi_x(x, t)
-
-        jac_c_t = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1], argnums=1)
-        dc_dt = jac_c_t(x, t)[0]
-
-        # hess_phi_x, hess_c_x = jax.hessian(self.net_u, argnums=(1))(params, x, t)
-
-        hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0], argnums=0)(
-            x, t
-        )
-        hess_c_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(
-            x, t
-        )
-        # hess_phi_x, hess_c_x = jax.hessian(self.net_u, argnums=(1))(params, x, t)
-
-        lap_phi = jnp.linalg.trace(hess_phi_x)
-        lap_c = jnp.linalg.trace(hess_c_x)
-
-        lap_h_phi = 6 * (
-            phi * (1 - phi) * lap_phi + (1 - 2 * phi) * jnp.sum(nabla_phi**2)
-        )
-
-        ch = dc_dt - CH1 * lap_c + CH1 * (self.cfg.CSE - self.cfg.CLE) * lap_h_phi
-
-        return ch / self.cfg.CH_PRE_SCALE
+        return pf.squeeze() / self.cfg.PF_PRE_SCALE
 
     def net_speed(self, params, x, t):
-        jac_dt = jax.jacrev(self.net_u, argnums=2)
-        dphi_dt, dc_dt = jac_dt(params, x, t)
-        return dphi_dt, dc_dt
+        # jac_dt = jax.jacrev(self.net_u, argnums=2)
+        # dphi_dt, dc_dt = jac_dt(params, x, t)
+        dphi_dt = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0], argnums=1)(x, t)[
+            0
+        ]
+        return dphi_dt
 
     def ref_sol_ic(self, x, t):
         raise NotImplementedError
@@ -178,44 +124,30 @@ class PINN(nn.Module):
     def ref_sol_bc(self, x, t):
         raise NotImplementedError
 
-    def net_nabla(
-        self,
-        params,
-        x,
-        t,
-    ):
-        idx = self.flux_idx
-        nabla_phi_part = jax.jacrev(
-            lambda x, t: self.net_u(params, x, t)[0], argnums=0
-        )(x, t)[idx]
-        nabla_c_part = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(
-            x, t
-        )[idx]
-        return nabla_phi_part, nabla_c_part
-
-    # def loss_ac(self, params, batch, eps):
-    #     x, t = batch
-    #     ac = vmap(self.net_ac, in_axes=(None, 0, 0))(params, x, t)
-    #     if not self.cfg.CAUSAL_WEIGHT:
-    #         return jnp.mean(ac**2), {}
-    #     else:
-    #         return self.causal_weightor.compute_causal_loss(ac, t, eps)
-
-    # def loss_ch(self, params, batch, eps):
-    #     x, t = batch
-    #     ch = vmap(self.net_ch, in_axes=(None, 0, 0))(params, x, t)
-    #     if not self.cfg.CAUSAL_WEIGHT:
-    #         return jnp.mean(ch**2), {}
-    #     else:
-    #         return self.causal_weightor.compute_causal_loss(ch, t, eps)
+    # def net_nabla(
+    #     self,
+    #     params,
+    #     x,
+    #     t,
+    # ):
+    #     idx = self.flux_idx
+    #     nabla_phi_part = jax.jacrev(
+    #         lambda x, t: self.net_u(params, x, t)[0], argnums=0
+    #     )(x, t)[idx]
+    #     nabla_c_part = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(
+    #         x, t
+    #     )[idx]
+    #     return nabla_phi_part, nabla_c_part
 
     @partial(jit, static_argnums=(0, 4))
     def loss_pde(self, params, batch, eps, pde_name: str):
         x, t = batch
         residual = jax.lax.cond(
-            pde_name == "ac",
-            lambda operand: vmap(self.net_ac, in_axes=(None, 0, 0))(params, *operand),
-            lambda operand: vmap(self.net_ch, in_axes=(None, 0, 0))(params, *operand),
+            pde_name == "stress",
+            lambda operand: vmap(self.net_stress, in_axes=(None, 0, 0))(
+                params, *operand
+            ),
+            lambda operand: vmap(self.net_pf, in_axes=(None, 0, 0))(params, *operand),
             operand=(x, t),
         )
         if not self.cfg.CAUSAL_WEIGHT:
@@ -224,26 +156,20 @@ class PINN(nn.Module):
             return self.causal_weightor.compute_causal_loss(residual, t, eps)
 
     def loss_ic(self, params, batch):
-        x, t = batch
-        u = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
-        ref = vmap(self.ref_sol_ic, in_axes=(0, 0))(x, t)
-        return jnp.mean((u - ref) ** 2)
+        raise NotImplementedError
 
     def loss_bc(self, params, batch):
-        x, t = batch
-        u = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
-        ref = vmap(self.ref_sol_bc, in_axes=(0, 0))(x, t)
-        return jnp.mean((u - ref) ** 2)
+        raise NotImplementedError
 
     def loss_irr(self, params, batch):
         x, t = batch
-        dphi_dt, dc_dt = vmap(self.net_speed, in_axes=(None, 0, 0))(params, x, t)
-        return jnp.mean(jax.nn.relu(dphi_dt)) + jnp.mean(jax.nn.relu(dc_dt))
+        dphi_dt = vmap(self.net_speed, in_axes=(None, 0, 0))(params, x, t)
+        return jnp.mean(jax.nn.relu(-dphi_dt))
 
-    def loss_flux(self, params, batch):
-        x, t = batch
-        dphi_dx, dc_dx = vmap(self.net_nabla, in_axes=(None, 0, 0))(params, x, t)
-        return jnp.mean(dphi_dx**2) + jnp.mean(dc_dx**2)
+    # def loss_flux(self, params, batch):
+    #     x, t = batch
+    #     dphi_dx, dc_dx = vmap(self.net_nabla, in_axes=(None, 0, 0))(params, x, t)
+    #     return jnp.mean(dphi_dx**2) + jnp.mean(dc_dx**2)
 
     @partial(jit, static_argnums=(0, 4))
     def compute_losses_and_grads(self, params, batch, eps, pde_name):

@@ -44,28 +44,27 @@ class PINN(nn.Module):
     def net_u(self, params, x, t):
         # x: (d,), t: (1,)
         # phi: scalar, disp: (d,)
-        sol = self.model.apply(params, x, t)
+        sol0 = self.ref_sol_ic(x, t)
+        sol = sol0 + self.model.apply(params, x, t) * t
         phi, disp = jnp.split(sol, [1], axis=-1)
         disp = disp / self.cfg.DISP_PRE_SCALE
-        phi = nn.tanh(phi) / 2 + 0.5
+        # phi = nn.tanh(phi) / 2 + 0.5
         return phi, disp
+        # raise NotImplementedError("net_u should be implemented in subclass")
 
     @partial(jit, static_argnums=(0,))
     def epsilon(self, params, x, t):
         # epsilon: (d, d)
         # $$ \varepsilon = sym(\nabla u) = \frac{1}{2}(\nabla u + (\nabla u)^T) $$
-        disp_fn = lambda x, t: self.net_u(params, x, t)[1]
-        nabla_disp = jax.jacrev(disp_fn, argnums=0)(x, t)
+        nabla_disp = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(x, t)
         return (nabla_disp + nabla_disp.T) / 2
 
     @partial(jit, static_argnums=(0,))
     def sigma(self, params, x, t):
         # sigma: (d, d)
-        return 2.0 * self.cfg.MU * self.epsilon(
-            params, x, t
-        ) + self.cfg.LAMBDA * jnp.trace(self.epsilon(params, x, t)) * jnp.eye(
-            x.shape[-1]
-        )
+        return (2.0 * self.cfg.MU * self.epsilon(params, x, t) \
+                + self.cfg.LAMBDA * jnp.trace(self.epsilon(params, x, t)) \
+                    * jnp.eye(x.shape[-1]))
 
     @partial(jit, static_argnums=(0,))
     def psi(self, params, x, t):
@@ -95,16 +94,17 @@ class PINN(nn.Module):
     @partial(jit, static_argnums=(0,))
     def net_pf(self, params, x, t):
         phi, disp = self.net_u(params, x, t)
+        phi = phi.squeeze()
         hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0], argnums=0)(
             x, t
-        )
+        )[0]
         lap_phi = jnp.linalg.trace(hess_phi_x)
 
         pf = self.cfg.GC * (phi / self.cfg.L - self.cfg.L * lap_phi) - 2 * (
             1 - phi
         ) * self.psi(params, x, t)
 
-        return pf.squeeze() / self.cfg.PF_PRE_SCALE
+        return pf / self.cfg.PF_PRE_SCALE
 
     def net_speed(self, params, x, t):
         # jac_dt = jax.jacrev(self.net_u, argnums=2)
@@ -203,6 +203,8 @@ class PINN(nn.Module):
         weights = self.grad_norm_weights(grads)
         if not self.cfg.IRR:
             weights = weights.at[-1].set(0.0)
+
+        # weights = weights.at[2].set(weights[2] * 10)
 
         return jnp.sum(weights * losses), (losses, weights, aux_vars)
 

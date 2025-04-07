@@ -1,6 +1,7 @@
 .vscode/
 
 demo/
+debug/
 output/
 demo.*
 logs/

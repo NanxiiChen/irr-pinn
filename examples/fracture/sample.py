@@ -85,7 +85,7 @@ class FractureSampler(Sampler):
         rar = self.sample_pde_rar(*args, **kwargs)
         return (
             rar,
-            self.sample_ic(),
+            # self.sample_ic(),
             self.sample_bc(),
             rar,
         )

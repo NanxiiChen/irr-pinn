@@ -32,12 +32,15 @@ from pinn import (
 )
 
 
+# from jax import config
+# config.update("jax_disable_jit", True)
+
 class FracturePINN(PINN):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.loss_fn_panel = [
             self.loss_pde,
-            self.loss_ic,
+            # self.loss_ic,
             self.loss_bc,
             self.loss_irr,
         ]
@@ -61,7 +64,7 @@ class FracturePINN(PINN):
         # if y > 0, phi = 0
         # elif y < 0, phi = exp(-|y| / l)
         # ux = 0, uy = 0
-        phi = jnp.exp(-jnp.abs(x[1] / self.cfg.L)) * jnp.where(x[1] < 0, 1, 0)
+        phi = jnp.exp(-jnp.abs(x[1] / self.cfg.L)) * jnp.where(x[0] < 0, 1, 0)
         sol = jnp.stack([phi, 0.0, 0.0], axis=-1)
         return jax.lax.stop_gradient(sol)
 
@@ -83,6 +86,7 @@ class FracturePINN(PINN):
         x, t = batch["top"]
         phi, disp = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
         uy = disp[:, 1]
+        phi = phi[:, 0]
         ref = vmap(self.ref_sol_bc_top, in_axes=(0, 0))(x, t)
         top = jnp.mean((phi - ref[:, 0]) ** 2) + jnp.mean((uy - ref[:, 2]) ** 2)
 
@@ -90,7 +94,7 @@ class FracturePINN(PINN):
         phi = vmap(
             lambda x, t: self.net_u(params, x, t)[0],
             in_axes=(0, 0),
-        )(x, t)
+        )(x, t)[:, 0]
         ref = vmap(self.ref_sol_bc_crack, in_axes=(0, 0))(x, t)
         crack = jnp.mean((phi - ref) ** 2)
 
@@ -179,11 +183,11 @@ for epoch in range(cfg.EPOCHS):
             names=[
                 "loss/weighted",
                 f"loss/{pde_name}",
-                "loss/ic",
+                # "loss/ic",
                 "loss/bc",
                 "loss/irr",
                 f"weight/{pde_name}",
-                "weight/ic",
+                # "weight/ic",
                 "weight/bc",
                 "weight/irr",
                 "error/error",

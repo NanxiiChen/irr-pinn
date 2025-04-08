@@ -44,11 +44,12 @@ class PINN(nn.Module):
     def net_u(self, params, x, t):
         # x: (d,), t: (1,)
         # phi: scalar, disp: (d,)
-        sol0 = self.ref_sol_ic(x, t)
-        sol = sol0 + self.model.apply(params, x, t) * t
+        # sol0 = self.ref_sol_ic(x, t)
+        # neg_y = jnp.array([1.0, -1.0])
+        sol = self.model.apply(params, x, t)
         phi, disp = jnp.split(sol, [1], axis=-1)
         disp = disp / self.cfg.DISP_PRE_SCALE
-        # phi = nn.tanh(phi) / 2 + 0.5
+        phi = jnp.tanh(phi) / 2 + 1/2
         return phi, disp
         # raise NotImplementedError("net_u should be implemented in subclass")
 
@@ -77,15 +78,14 @@ class PINN(nn.Module):
     @partial(jit, static_argnums=(0,))
     def net_stress(self, params, x, t):
         # $$ (1 - \phi) **2 \nabla \cdot \sigma = 0 $$
-        phi, disp = self.net_u(params, x, t)
-        # 求应力张量的散度: div_sigma = \nabla\cdot\sigma
-        # sigma: [[sigma_xx, sigma_xy], [sigma_yx, sigma_yy]]
-        # div_sigma:[partial sigma_xx / partial x + partial sigma_xy / partial y, \
-        #           partial sigma_yx / partial x + partial sigma_yy / partial y]]
-
+        phi, _ = self.net_u(params, x, t)
         jac_sigma_x = jax.jacrev(self.sigma, argnums=1)(params, x, t)
-        div_sigma = jnp.sum(jnp.diagonal(jac_sigma_x, axis1=0, axis2=2), axis=0)
 
+        # sigma[i,j]: sigma_ij
+        # jac_sigma[i,j,k]: dsigma_ij / dx_k
+        # div_sigma[i]: dsigma_ij / dx_i
+        div_sigma = jnp.einsum("iji->j", jac_sigma_x)
+        
         stress = (1 - phi) ** 2 * div_sigma
         stress = jnp.sum(jnp.abs(stress), axis=-1)
 
@@ -204,7 +204,7 @@ class PINN(nn.Module):
         if not self.cfg.IRR:
             weights = weights.at[-1].set(0.0)
 
-        # weights = weights.at[2].set(weights[2] * 10)
+        weights = weights.at[1].set(weights[1] * 10)
 
         return jnp.sum(weights * losses), (losses, weights, aux_vars)
 

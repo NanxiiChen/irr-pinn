@@ -42,9 +42,10 @@ class FractureSampler(Sampler):
             num=self.n_samples**2,
             key=key,
         )
+
         x_local = lhs_sampling(
             mins=[self.domain[0][0], -0.1],
-            maxs=[0.0, 0.1],
+            maxs=[self.domain[0][1], 0.1],
             num=self.n_samples**2 * 5,
             key=self.key,
         )
@@ -68,6 +69,16 @@ class FractureSampler(Sampler):
             [xt[:, 0:1], jnp.ones_like(xt[:, 0:1]) * self.domain[1][0], xt[:, 1:2]],
             axis=1,
         )
+        yt = lhs_sampling(
+            mins=[self.domain[0][0], self.domain[1][0]],
+            maxs=[self.domain[0][1], self.domain[1][1]],
+            num=self.n_samples**2,
+            key=key,
+        )
+        right = jnp.concatenate(
+            [jnp.ones_like(yt[:, 0:1]) * self.domain[0][1], yt[:, 0:1], yt[:, 1:2]],
+            axis=1,
+        )
 
         crack = lhs_sampling(
             mins=[self.domain[0][0], -0.05, self.domain[2][0]],
@@ -75,9 +86,11 @@ class FractureSampler(Sampler):
             num=self.n_samples**2,
             key=self.key,
         )
+
         return {
             "top": (top[:, :-1], top[:, -1:]),
             "bottom": (bottom[:, :-1], bottom[:, -1:]),
+            "right": (right[:, :-1], right[:, -1:]),
             "crack": (crack[:, :-1], crack[:, -1:]),
         }
 
@@ -85,7 +98,7 @@ class FractureSampler(Sampler):
         rar = self.sample_pde_rar(*args, **kwargs)
         return (
             rar,
-            # self.sample_ic(),
+            self.sample_ic(),
             self.sample_bc(),
             rar,
         )

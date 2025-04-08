@@ -110,6 +110,7 @@ class Sampler:
                 idx * self.adaptive_kw["num"] : (idx + 1) * self.adaptive_kw["num"], :
             ].set(selected_points)
 
+
         data = jnp.concatenate(
             [
                 common_points,

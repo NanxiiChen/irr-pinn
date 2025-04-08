@@ -4,22 +4,22 @@ Sharp-PINNs for pitting corrosion with 2d-1pit
 
 
 class Config:
-    EPOCHS = 2000
+    EPOCHS = 20000
     N_SAMPLES = 15
-    ADAPTIVE_SAMPLES = 20000
+    ADAPTIVE_SAMPLES = 5000
     ADAPTIVE_BASE_RATE = 5
     LR = 5e-4
     DECAY = 0.9
-    DECAY_EVERY = 200
+    DECAY_EVERY = 500
     STAGGER_PERIOD = 25
-    EMB_SCALE = (2.0, 2.0)  # emb sacle for (x, t)
+    EMB_SCALE = (1.0, 2.0)  # emb sacle for (x, t)
     EMB_DIM = 64
 
-    DOMAIN = [[-0.5, 0.5], [-0.5, 0.5], [0, 0.78]]
+    DOMAIN = [[-0.5, 0.5], [-0.5, 0.5], [0, 0.77]]
     DATA_PATH = "./data/fracture/"
     LOG_DIR = "/root/tf-logs"
     PREFIX = "fracture/irr"
-    TS = [0.0000, 0.5000, 0.7200, 0.7800]
+    TS = [0.0000, 0.3000, 0.7000, 0.7700]
 
     NUM_LAYERS = 6
     HIDDEN_DIM = 64
@@ -45,8 +45,8 @@ class Config:
     PF_PRE_SCALE = 1e3
 
     CAUSAL_CONFIGS = {
-        "stress_eps": 1e-2,
-        "pf_eps": 1e-5,
+        "stress_eps": 1e0,
+        "pf_eps": 1e0,
         "step_size": 10,
         "max_last_weight": 0.99,
         "min_mean_weight": 0.5,
@@ -56,7 +56,6 @@ class Config:
 
 
 # if __name__ == "__main__":
-#     for key, value in Config.__dict__.items():
-#         # 将所以的item作为全局变量，key = value 的形式
+#     for key, value in Config.__dict__.items():self.adaptive_kw["num"]
 #         if not key.startswith("__"):
 #             globals()[key] = value

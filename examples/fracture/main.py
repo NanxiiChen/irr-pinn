@@ -40,7 +40,7 @@ class FracturePINN(PINN):
         super().__init__(*args, **kwargs)
         self.loss_fn_panel = [
             self.loss_pde,
-            # self.loss_ic,
+            self.loss_ic,
             self.loss_bc,
             self.loss_irr,
         ]
@@ -54,6 +54,9 @@ class FracturePINN(PINN):
 
     def ref_sol_bc_bottom(self, x, t):
         return jax.lax.stop_gradient(jnp.array([0.0, 0.0, 0.0]))
+    
+    def ref_sol_bc_right(self, x, t):
+        return jax.lax.stop_gradient(0.0)
 
     def ref_sol_bc_crack(self, x, t):
         # phi = exp(-|y| / l)
@@ -97,6 +100,14 @@ class FracturePINN(PINN):
         )(x, t)[:, 0]
         ref = vmap(self.ref_sol_bc_crack, in_axes=(0, 0))(x, t)
         crack = jnp.mean((phi - ref) ** 2)
+
+        # x, t = batch["right"]
+        # phi = vmap(
+        #     lambda x, t: self.net_u(params, x, t)[0],
+        #     in_axes=(0, 0),
+        # )(x, t)[:, 0]
+        # ref = vmap(self.ref_sol_bc_right, in_axes=(0, 0))(x, t)
+        # right = jnp.mean((phi - ref) ** 2)
 
         return bottom + 10*top + crack
 
@@ -174,7 +185,8 @@ for epoch in range(cfg.EPOCHS):
 
         print(
             f"Epoch: {epoch}, "
-            f"Error: {error:.2e}, "
+            f"Error_phi: {error[0]:.2e}, "
+            f"Error_uy: {error[1]:.2e}, "
             f"Loss_{pde_name}: {loss_components[0]:.2e}, "
         )
 
@@ -183,16 +195,17 @@ for epoch in range(cfg.EPOCHS):
             names=[
                 "loss/weighted",
                 f"loss/{pde_name}",
-                # "loss/ic",
+                "loss/ic",
                 "loss/bc",
                 "loss/irr",
                 f"weight/{pde_name}",
-                # "weight/ic",
+                "weight/ic",
                 "weight/bc",
                 "weight/irr",
-                "error/error",
+                "error/error_phi",
+                "error/error_uy",
             ],
-            values=[weighted_loss, *loss_components, *weight_components, error],
+            values=[weighted_loss, *loss_components, *weight_components, *error],
         )
         metrics_tracker.register_figure(epoch, fig, "error")
         plt.close(fig)

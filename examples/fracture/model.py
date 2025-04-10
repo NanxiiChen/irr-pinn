@@ -42,38 +42,47 @@ class PINN(nn.Module):
 
     @partial(jit, static_argnums=(0,))
     def net_u(self, params, x, t):
-        # x: (d,), t: (1,)
-        # phi: scalar, disp: (d,)
-        # sol0 = self.ref_sol_ic(x, t)
-        # neg_y = jnp.array([1.0, -1.0])
         sol = self.model.apply(params, x, t)
         phi, disp = jnp.split(sol, [1], axis=-1)
         disp = disp / self.cfg.DISP_PRE_SCALE
-        phi = jnp.tanh(phi) / 2 + 1/2
+        phi = jnp.exp(-phi / 5)
         return phi, disp
-        # raise NotImplementedError("net_u should be implemented in subclass")
 
     @partial(jit, static_argnums=(0,))
     def epsilon(self, params, x, t):
         # epsilon: (d, d)
         # $$ \varepsilon = sym(\nabla u) = \frac{1}{2}(\nabla u + (\nabla u)^T) $$
-        nabla_disp = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(x, t)
+        nabla_disp = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(
+            x, t
+        )
         return (nabla_disp + nabla_disp.T) / 2
 
     @partial(jit, static_argnums=(0,))
     def sigma(self, params, x, t):
         # sigma: (d, d)
-        return (2.0 * self.cfg.MU * self.epsilon(params, x, t) \
-                + self.cfg.LAMBDA * jnp.trace(self.epsilon(params, x, t)) \
-                    * jnp.eye(x.shape[-1]))
+        return 2.0 * self.cfg.MU * self.epsilon(
+            params, x, t
+        ) + self.cfg.LAMBDA * jnp.trace(self.epsilon(params, x, t)) * jnp.eye(
+            x.shape[-1]
+        )
 
     @partial(jit, static_argnums=(0,))
     def psi(self, params, x, t):
         # psi: scalar
         epsilon = self.epsilon(params, x, t)
-        return self.cfg.LAMBDA * jnp.trace(epsilon) ** 2 / 2 + self.cfg.MU * jnp.sum(
-            epsilon**2
+        tr_eps = jnp.trace(epsilon)
+        pos_energy = (
+            (1 / 2)
+            * (self.cfg.LAMBDA + self.cfg.MU)
+            * ((tr_eps + jnp.abs(tr_eps)) / 2) ** 2
         )
+        dev_eps = epsilon - tr_eps * jnp.eye(x.shape[-1]) / x.shape[-1]
+        # Frobenius norm
+        l2_eps = jnp.linalg.norm(dev_eps, ord="fro") ** 2
+        return pos_energy + self.cfg.MU * l2_eps
+        # return self.cfg.LAMBDA * jnp.trace(epsilon) ** 2 / 2 + self.cfg.MU * jnp.sum(
+        #     epsilon**2
+        # )
 
     @partial(jit, static_argnums=(0,))
     def net_stress(self, params, x, t):
@@ -85,11 +94,15 @@ class PINN(nn.Module):
         # jac_sigma[i,j,k]: dsigma_ij / dx_k
         # div_sigma[i]: dsigma_ij / dx_i
         div_sigma = jnp.einsum("iji->j", jac_sigma_x)
-        
-        stress = (1 - phi) ** 2 * div_sigma
-        stress = jnp.sum(jnp.abs(stress), axis=-1)
 
-        return stress / self.cfg.STRESS_PRE_SCALE
+        stress = (1 - phi) ** 2 * div_sigma
+        weights = jax.lax.stop_gradient(
+            jnp.sum(jnp.abs(stress), axis=-1) / (jnp.abs(stress) + 1e-6)
+        )
+        weighted_stress = jnp.sum(stress * weights, axis=-1)
+
+        # stress = jnp.sum(jnp.abs(stress), axis=-1)
+        return weighted_stress / self.cfg.STRESS_PRE_SCALE
 
     @partial(jit, static_argnums=(0,))
     def net_pf(self, params, x, t):
@@ -204,7 +217,7 @@ class PINN(nn.Module):
         if not self.cfg.IRR:
             weights = weights.at[-1].set(0.0)
 
-        weights = weights.at[1].set(weights[1] * 10)
+        # weights = weights.at[1].set(weights[1] * 10)
 
         return jnp.sum(weights * losses), (losses, weights, aux_vars)
 

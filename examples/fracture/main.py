@@ -35,6 +35,7 @@ from pinn import (
 # from jax import config
 # config.update("jax_disable_jit", True)
 
+
 class FracturePINN(PINN):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -54,7 +55,7 @@ class FracturePINN(PINN):
 
     def ref_sol_bc_bottom(self, x, t):
         return jax.lax.stop_gradient(jnp.array([0.0, 0.0, 0.0]))
-    
+
     def ref_sol_bc_right(self, x, t):
         return jax.lax.stop_gradient(0.0)
 
@@ -74,30 +75,44 @@ class FracturePINN(PINN):
     def loss_ic(self, params, batch):
         x, t = batch
         phi, disp = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
-        sol = jnp.stack([phi[:, 0], disp[:, 0], disp[:, 1]], axis=-1)
+        phi = phi[:, 0]
+        # sol = jnp.stack([phi[:, 0], disp[:, 0], disp[:, 1]], axis=-1)
         ref = vmap(self.ref_sol_ic, in_axes=(0, 0))(x, t)
-        return jnp.mean((sol - ref) ** 2)
+        return jnp.mean((phi - ref[:, 0]) ** 2) + jnp.mean(disp ** 2) * 1e5
 
     def loss_bc(self, params, batch):
 
         x, t = batch["bottom"]
         phi, disp = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
-        sol = jnp.stack([phi[:, 0], disp[:, 0], disp[:, 1]], axis=-1)
+        # sol = jnp.stack([phi[:, 0], disp[:, 0], disp[:, 1]], axis=-1)
         ref = vmap(self.ref_sol_bc_bottom, in_axes=(0, 0))(x, t)
-        bottom = jnp.mean((sol - ref) ** 2)
+        phi_ref = ref[:, 0]
+        ux_ref = ref[:, 1]
+        uy_ref = ref[:, 2]
+        phi = phi[:, 0]
+        ux = disp[:, 0]
+        uy = disp[:, 1]
+        # bottom = jnp.mean((sol - ref) ** 2)
+        bottom = (
+            jnp.mean((phi - phi_ref) ** 2)
+            + jnp.mean((ux - ux_ref) ** 2) * 1e5
+            + jnp.mean((uy - uy_ref) ** 2) * 1e5
+        )
 
         x, t = batch["top"]
         phi, disp = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
         uy = disp[:, 1]
         phi = phi[:, 0]
         ref = vmap(self.ref_sol_bc_top, in_axes=(0, 0))(x, t)
-        top = jnp.mean((phi - ref[:, 0]) ** 2) + jnp.mean((uy - ref[:, 2]) ** 2)
+        top = jnp.mean((phi - ref[:, 0]) ** 2) + jnp.mean((uy - ref[:, 2]) ** 2) * 1e5
 
         x, t = batch["crack"]
         phi = vmap(
             lambda x, t: self.net_u(params, x, t)[0],
             in_axes=(0, 0),
-        )(x, t)[:, 0]
+        )(
+            x, t
+        )[:, 0]
         ref = vmap(self.ref_sol_bc_crack, in_axes=(0, 0))(x, t)
         crack = jnp.mean((phi - ref) ** 2)
 
@@ -109,10 +124,16 @@ class FracturePINN(PINN):
         # ref = vmap(self.ref_sol_bc_right, in_axes=(0, 0))(x, t)
         # right = jnp.mean((phi - ref) ** 2)
 
-        return bottom + 10*top + crack
+        # weights =
+
+        return bottom + 10 * top + crack
 
 
-causal_weightor = CausalWeightor(cfg.CAUSAL_CONFIGS["chunks"], cfg.DOMAIN[-1])
+causal_first_point = 0.5
+causal_bins_tail = jnp.linspace(causal_first_point, cfg.DOMAIN[-1][-1], cfg.CAUSAL_CONFIGS["chunks"])
+# insert 0.0 at the beginning of the bins
+causal_bins = jnp.insert(causal_bins_tail, 0, 0.0)
+causal_weightor = CausalWeightor(cfg.CAUSAL_CONFIGS["chunks"], t_range=cfg.DOMAIN[-1], bins=causal_bins)
 pinn = FracturePINN(config=cfg, causal_weightor=causal_weightor)
 
 init_key = random.PRNGKey(0)
@@ -139,7 +160,7 @@ sampler = FractureSampler(
     },
 )
 
-stagger = StaggerSwitch(pde_names=["stress", "pf"], stagger_period=cfg.STAGGER_PERIOD)
+stagger = StaggerSwitch(pde_names=["pf", "stress"], stagger_period=cfg.STAGGER_PERIOD)
 
 start_time = time.time()
 for epoch in range(cfg.EPOCHS):

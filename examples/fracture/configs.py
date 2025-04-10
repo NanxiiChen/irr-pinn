@@ -10,25 +10,25 @@ class Config:
     ADAPTIVE_BASE_RATE = 5
     LR = 5e-4
     DECAY = 0.9
-    DECAY_EVERY = 500
-    STAGGER_PERIOD = 25
+    DECAY_EVERY = 2000
+    STAGGER_PERIOD = 100
     EMB_SCALE = (1.0, 2.0)  # emb sacle for (x, t)
     EMB_DIM = 64
 
-    DOMAIN = [[-0.5, 0.5], [-0.5, 0.5], [0, 0.77]]
+    DOMAIN = [[-0.5, 0.5], [-0.5, 0.5], [0, 0.78]]
     DATA_PATH = "./data/fracture/"
     LOG_DIR = "/root/tf-logs"
     PREFIX = "fracture/irr"
-    TS = [0.0000, 0.3000, 0.7000, 0.7700]
+    TS = [0.0000, 0.3000, 0.7000, 0.7800]
 
-    NUM_LAYERS = 6
-    HIDDEN_DIM = 64
+    NUM_LAYERS = 10
+    HIDDEN_DIM = 128
     OUT_DIM = 3
 
     ACT_NAME = "tanh"
-    ARCH_NAME = "mlp"
+    ARCH_NAME = "modified_mlp"
     ASYMMETRIC = True
-    FOURIER_EMB = True
+    FOURIER_EMB = False
     CAUSAL_WEIGHT = True
     IRR = True
 
@@ -40,14 +40,14 @@ class Config:
 
     Lc = 1.0
     Tc = 1.0
-    DISP_PRE_SCALE = 1e2
-    STRESS_PRE_SCALE = 1e6
-    PF_PRE_SCALE = 1e3
+    DISP_PRE_SCALE = 1e3
+    STRESS_PRE_SCALE = 1e5
+    PF_PRE_SCALE = 1e2
 
     CAUSAL_CONFIGS = {
-        "stress_eps": 1e0,
-        "pf_eps": 1e0,
-        "step_size": 10,
+        "stress_eps": 1e-2,
+        "pf_eps": 1e-2,
+        "step_size": 5,
         "max_last_weight": 0.99,
         "min_mean_weight": 0.5,
         "max_eps": 1e2,

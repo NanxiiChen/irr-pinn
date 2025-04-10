@@ -9,11 +9,13 @@ class CausalWeightor:
         self,
         num_chunks: int,
         t_range: tuple,
+        **kwargs,
     ):
 
         self.num_chunks = num_chunks
         self.t_range = t_range
-        self.bins = jnp.linspace(t_range[0], t_range[1], num_chunks + 1)
+        # self.bins = jnp.linspace(t_range[0], t_range[1], num_chunks + 1)
+        self.bins = kwargs.get("bins", jnp.linspace(t_range[0], t_range[1], num_chunks + 1))
 
     @partial(jax.jit, static_argnums=(0,))
     def compute_causal_weight(self, loss_chunks: jnp.array, eps: jnp.array):

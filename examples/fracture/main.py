@@ -1,7 +1,3 @@
-"""
-Sharp-PINNs for pitting corrosion with 2d-1pit
-"""
-
 import datetime
 import sys
 import time
@@ -48,8 +44,8 @@ class FracturePINN(PINN):
         self.flux_idx = 1
 
     def ref_sol_bc_top(self, x, t):
-        # uy = ur * t
-        uy = self.cfg.UR * t[0]
+        # uy = 0.007 * 0.78 / np.tanh(3) * np.tanh(3 * t)
+        uy = self.cfg.UR * 0.78 / jnp.tanh(3.0) * jnp.tanh(3.0 * t[0])
         return jax.lax.stop_gradient(jnp.array([0.0, 0.0, uy]))
 
     def ref_sol_bc_bottom(self, x, t):
@@ -77,7 +73,7 @@ class FracturePINN(PINN):
         phi = phi[:, 0]
         # sol = jnp.stack([phi[:, 0], disp[:, 0], disp[:, 1]], axis=-1)
         ref = vmap(self.ref_sol_ic, in_axes=(0, 0))(x, t)
-        return jnp.mean((phi - ref[:, 0]) ** 2) + jnp.mean(disp**2) * 1e5
+        return jnp.mean((phi - ref[:, 0]) ** 2) + jnp.mean(disp**2) * 1e4
 
     def loss_bc(self, params, batch):
 
@@ -91,8 +87,8 @@ class FracturePINN(PINN):
         # bottom = jnp.mean((sol - ref) ** 2)
         bottom = (
             jnp.mean((phi - ref[:, 0]) ** 2)
-            + jnp.mean((ux - ref[:, 1]) ** 2) * 1e5
-            + jnp.mean((uy - ref[:, 2]) ** 2) * 1e5
+            + jnp.mean((ux - ref[:, 1]) ** 2) * 1e4
+            + jnp.mean((uy - ref[:, 2]) ** 2) * 1e4
         )
 
         x, t = batch["top"]
@@ -109,8 +105,8 @@ class FracturePINN(PINN):
         # eps_yy = epsilon[:, 1, 1]
         top = (
             jnp.mean((phi - ref[:, 0]) ** 2)
-            + jnp.mean((uy - ref[:, 2]) ** 2) * 1e5
-            # + jnp.mean((eps_xx + self.cfg.NU * eps_yy) ** 2) * 1e5
+            + jnp.mean((uy - ref[:, 2]) ** 2) * 1e4
+            # + jnp.mean((eps_xx + self.cfg.NU * eps_yy) ** 2) * 1e4
         )
 
         x, t = batch["crack"]
@@ -123,17 +119,7 @@ class FracturePINN(PINN):
         ref = vmap(self.ref_sol_bc_crack, in_axes=(0, 0))(x, t)
         crack = jnp.mean((phi - ref) ** 2)
 
-        # x, t = batch["right"]
-        # phi = vmap(
-        #     lambda x, t: self.net_u(params, x, t)[0],
-        #     in_axes=(0, 0),
-        # )(x, t)[:, 0]
-        # ref = vmap(self.ref_sol_bc_right, in_axes=(0, 0))(x, t)
-        # right = jnp.mean((phi - ref) ** 2)
-
-        # weights =
-
-        return bottom + top + crack
+        return bottom + 10*top + crack
 
     # def loss_poison(self, params, batch):
     #     x, t = batch
@@ -142,8 +128,7 @@ class FracturePINN(PINN):
     #     )
 
 
-
-causal_first_point = 0.5
+causal_first_point = 0.3
 causal_bins_tail = jnp.linspace(
     causal_first_point, cfg.DOMAIN[-1][-1], cfg.CAUSAL_CONFIGS["chunks"]
 )
@@ -164,6 +149,18 @@ state = create_train_state(
     decay_every=cfg.DECAY_EVERY,
     xdim=len(cfg.DOMAIN) - 1,
 )
+
+
+if cfg.RESUME is not None:
+    ckpt = ocp.StandardCheckpointer()
+    restore_state = ckpt.restore(cfg.RESUME)
+    # state load the params from the checkpoint
+    state = state.replace(
+        params=restore_state["params"],
+    )
+    print(f"Restored from {cfg.RESUME}")
+
+
 now = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 log_path = f"{cfg.LOG_DIR}/{cfg.PREFIX}/{now}"
 metrics_tracker = MetricsTracker(log_path)
@@ -225,7 +222,8 @@ for epoch in range(cfg.EPOCHS):
         print(
             f"Epoch: {epoch}, "
             f"Error_phi: {error[0]:.2e}, "
-            f"Error_uy: {error[1]:.2e}, "
+            f"Error_ux: {error[1]:.2e}, "
+            f"Error_uy: {error[2]:.2e}, "
             f"Loss_{pde_name}: {loss_components[0]:.2e}, "
         )
 
@@ -242,6 +240,7 @@ for epoch in range(cfg.EPOCHS):
                 "weight/bc",
                 "weight/irr",
                 "error/error_phi",
+                "error/error_ux",
                 "error/error_uy",
             ],
             values=[weighted_loss, *loss_components, *weight_components, *error],

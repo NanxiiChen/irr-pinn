@@ -12,6 +12,7 @@ from .utils import StaggerSwitch
 from .train import train_step, create_train_state, StaggerSwitch
 
 
+
 def configure_matplotlib():
     matplotlib.use("Agg")
     rcParams.update(

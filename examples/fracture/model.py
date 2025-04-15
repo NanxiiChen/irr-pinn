@@ -44,26 +44,34 @@ class PINN(nn.Module):
     def net_u(self, params, x, t):
         sol = self.model.apply(params, x, t)
         phi, disp = jnp.split(sol, [1], axis=-1)
+        # phi, disp = self.model.apply(params, x, t)
         disp = disp / self.cfg.DISP_PRE_SCALE
-        # phi = jnp.exp(-phi)
+        # phi = jnp.exp(-jnp.abs(phi))
+        phi = jax.nn.tanh(phi) / 2 + 0.5
+        # phi = 1.1 * phi - 0.05
         return phi, disp
 
     @partial(jit, static_argnums=(0,))
     def epsilon(self, params, x, t):
         # epsilon: (d, d)
         # $$ \varepsilon = sym(\nabla u) = \frac{1}{2}(\nabla u + (\nabla u)^T) $$
+        assert x.shape[0] == self.cfg.DIM
         nabla_disp = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(
             x, t
         )
-        return (nabla_disp + nabla_disp.T) / 2
+        return (
+            nabla_disp
+            + jnp.transpose(nabla_disp, axes=(1, 0))
+        ) / 2.0
 
     @partial(jit, static_argnums=(0,))
     def sigma(self, params, x, t):
         # sigma: (d, d)
+        assert x.shape[0] == self.cfg.DIM
         return 2.0 * self.cfg.MU * self.epsilon(
             params, x, t
         ) + self.cfg.LAMBDA * jnp.trace(self.epsilon(params, x, t)) * jnp.eye(
-            x.shape[-1]
+            self.cfg.DIM
         )
 
     @partial(jit, static_argnums=(0,))
@@ -76,9 +84,8 @@ class PINN(nn.Module):
             * (self.cfg.LAMBDA + self.cfg.MU)
             * ((tr_eps + jnp.abs(tr_eps)) / 2) ** 2
         )
-        dev_eps = epsilon - tr_eps * jnp.eye(x.shape[-1]) / x.shape[-1]
-        # Frobenius norm
-        l2_eps = jnp.linalg.norm(dev_eps, ord="fro") ** 2
+        dev_eps = epsilon - tr_eps * jnp.eye(self.cfg.DIM) / self.cfg.DIM
+        l2_eps = jnp.linalg.norm(dev_eps, ord=2) ** 2
         return pos_energy + self.cfg.MU * l2_eps
         # return self.cfg.LAMBDA * jnp.trace(epsilon) ** 2 / 2 + self.cfg.MU * jnp.sum(
         #     epsilon**2
@@ -87,18 +94,15 @@ class PINN(nn.Module):
     @partial(jit, static_argnums=(0,))
     def net_stress(self, params, x, t):
         # $$ (1 - \phi) **2 \nabla \cdot \sigma = 0 $$
-        phi, _ = self.net_u(params, x, t)
-        jac_sigma_x = jax.jacrev(self.sigma, argnums=1)(params, x, t)
-
         # sigma[i,j]: sigma_ij
         # jac_sigma[i,j,k]: dsigma_ij / dx_k
         # div_sigma[i]: dsigma_ij / dx_i
+        phi, _ = self.net_u(params, x, t)
+        jac_sigma_x = jax.jacrev(self.sigma, argnums=1)(params, x, t)
         div_sigma = jnp.einsum("iji->j", jac_sigma_x)
-
         stress = (1 - phi) ** 2 * div_sigma
-        stress_norm = jnp.linalg.norm(stress, ord=1, axis=-1)
-        return stress_norm
-        
+        return stress / self.cfg.STRESS_PRE_SCALE
+
         # abs_stress = jnp.abs(stress)
         # weights = jax.lax.stop_gradient(
         #     jnp.sum(abs_stress, axis=-1) / (abs_stress + 1e-8)
@@ -155,14 +159,27 @@ class PINN(nn.Module):
     @partial(jit, static_argnums=(0, 4))
     def loss_pde(self, params, batch, eps, pde_name: str):
         x, t = batch
-        residual = jax.lax.cond(
-            pde_name == "stress",
-            lambda operand: vmap(self.net_stress, in_axes=(None, 0, 0))(
-                params, *operand
-            ),
-            lambda operand: vmap(self.net_pf, in_axes=(None, 0, 0))(params, *operand),
-            operand=(x, t),
-        )
+        # residual = jax.lax.cond(
+        #     pde_name == "stress",
+        #     lambda operand: vmap(self.net_stress, in_axes=(None, 0, 0))(
+        #         params, *operand
+        #     ),
+        #     lambda operand: vmap(self.net_pf, in_axes=(None, 0, 0))(params, *operand),
+        #     operand=(x, t),
+        # )
+
+        if pde_name == "stress":
+            residual = vmap(self.net_stress, in_axes=(None, 0, 0))(params, x, t)
+            sum_abs_res = jnp.sum(jnp.abs(residual), axis=0)
+            weights = jax.lax.stop_gradient(
+                jnp.sum(sum_abs_res, axis=-1) / (sum_abs_res + 1e-5)
+            )
+            residual = jnp.sum(jnp.abs(residual) * weights, axis=-1)
+        elif pde_name == "pf":
+            residual = vmap(self.net_pf, in_axes=(None, 0, 0))(params, x, t)
+        else:
+            raise ValueError(f"Unknown PDE name: {pde_name}")
+
         if not self.cfg.CAUSAL_WEIGHT:
             return jnp.mean(residual**2), {}
         else:

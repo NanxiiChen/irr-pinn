@@ -5,17 +5,24 @@ import jax.numpy as jnp
 import optax
 from flax.training import train_state
 from jax import jit
-
+from .soap import soap as soap
 
 def create_train_state(model, rng, lr, **kwargs):
     decay = kwargs.get("decay", 0.9)
     decay_every = kwargs.get("decay_every", 1000)
     xdim = kwargs.get("xdim", 3)
     params = model.init(rng, jnp.ones(xdim), jnp.ones(1))
-    scheduler = optax.exponential_decay(lr, decay_every, decay, staircase=True)
-    optimizer = optax.chain(
-        optax.clip_by_global_norm(1.0),
-        optax.adam(scheduler),
+    # scheduler = optax.exponential_decay(lr, decay_every, decay, staircase=True)
+    # optimizer = optax.chain(
+    #     optax.clip_by_global_norm(1.0),
+    #     optax.adam(scheduler),
+    # )
+    optimizer = soap(
+        learning_rate=lr,
+        b1=0.99,
+        b2=0.999,
+        weight_decay=0.01,
+        precondition_frequency=2,
     )
     return train_state.TrainState.create(
         apply_fn=model.apply,

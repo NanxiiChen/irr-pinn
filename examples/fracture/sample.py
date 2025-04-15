@@ -29,8 +29,53 @@ class FractureSampler(Sampler):
         data = shifted_grid(
             self.mins,
             self.maxs,
-            [self.n_samples, self.n_samples, self.n_samples * 2],
+            [self.n_samples, self.n_samples, self.n_samples*2],
             key,
+        )
+
+        # data_crack = shifted_grid(
+        #     [self.mins[0], self.mins[1], 0.70],
+        #     self.maxs,
+        #     [self.n_samples, self.n_samples, self.n_samples],
+        #     key,
+        # )
+
+        # data = jnp.concatenate([data_global, data_crack], axis=0)
+
+        return data[:, :-1], data[:, -1:]
+
+    def sample_pde_rar(self, fns, params):
+        key, self.key = random.split(self.key)
+        grid_key, lhs_key = random.split(key)
+        common_points = jnp.concatenate(self.sample_pde(), axis=-1)
+
+        adaptive_base = lhs_sampling(
+            self.mins,
+            self.maxs,
+            self.adaptive_kw["num"] * self.adaptive_kw["ratio"],
+            key=lhs_key,
+        )
+        x, t = adaptive_base[:, :-1], adaptive_base[:, -1:]
+        rar_points = jnp.zeros(
+            (self.adaptive_kw["num"] * len(fns), adaptive_base.shape[1])
+        )
+
+        for idx, fn in enumerate(fns):
+            res = jax.lax.stop_gradient(vmap(fn, in_axes=(None, 0, 0))(params, x, t))
+            if res.ndim > 1:
+                res = jnp.linalg.norm(res, ord=1, axis=-1)
+            _, indices = jax.lax.top_k(jnp.abs(res), self.adaptive_kw["num"])
+            selected_points = adaptive_base[indices]
+            rar_points = rar_points.at[
+                idx * self.adaptive_kw["num"] : (idx + 1) * self.adaptive_kw["num"], :
+            ].set(selected_points)
+
+        data = jnp.concatenate(
+            [
+                common_points,
+                rar_points,
+            ],
+            axis=0,
         )
         return data[:, :-1], data[:, -1:]
 

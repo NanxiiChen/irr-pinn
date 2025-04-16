@@ -13,17 +13,17 @@ def create_train_state(model, rng, lr, **kwargs):
     xdim = kwargs.get("xdim", 3)
     params = model.init(rng, jnp.ones(xdim), jnp.ones(1))
     scheduler = optax.exponential_decay(lr, decay_every, decay, staircase=True)
-    optimizer = optax.chain(
-        optax.clip_by_global_norm(1.0),
-        optax.adam(scheduler),
-    )
-    # optimizer = soap(
-    #     learning_rate=lr,
-    #     b1=0.99,
-    #     b2=0.999,
-    #     weight_decay=0.01,
-    #     precondition_frequency=2,
+    # optimizer = optax.chain(
+    #     optax.clip_by_global_norm(1.0),
+    #     optax.adam(scheduler),
     # )
+    optimizer = soap(
+        learning_rate=lr,
+        b1=0.99,
+        b2=0.999,
+        weight_decay=0.01,
+        precondition_frequency=2,
+    )
     return train_state.TrainState.create(
         apply_fn=model.apply,
         params=params,

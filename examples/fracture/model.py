@@ -45,7 +45,8 @@ class PINN(nn.Module):
         sol = self.model.apply(params, x, t)
         phi, disp = jnp.split(sol, [1], axis=-1)
         disp = disp / self.cfg.DISP_PRE_SCALE
-        phi = jax.nn.tanh(phi) / 2 + 0.5
+        phi = jnp.exp(-jnp.abs(phi))
+        # phi = jax.nn.tanh(phi) / 2 + 0.5
         return phi, disp
 
     @partial(jit, static_argnums=(0,))
@@ -105,22 +106,10 @@ class PINN(nn.Module):
         stress = (1 - phi) ** 2 * div_sigma - 2 * (1 - phi) * sigma_cdot_nabla_phi
         return stress / self.cfg.STRESS_PRE_SCALE
 
-        # stress = (1 - phi) ** 2 * div_sigma
-        # return stress / self.cfg.STRESS_PRE_SCALE
-
-        # abs_stress = jnp.abs(stress)
-        # weights = jax.lax.stop_gradient(
-        #     jnp.sum(abs_stress, axis=-1) / (abs_stress + 1e-8)
-        # )
-        # weighted_stress = jnp.sum(abs_stress * weights, axis=-1)
-
-        # weighted_stress = jnp.sum(jnp.abs(stress), axis=-1)
-        # return weighted_stress / self.cfg.STRESS_PRE_SCALE
-
     @partial(jit, static_argnums=(0,))
     def net_pf(self, params, x, t):
         phi, disp = self.net_u(params, x, t)
-        phi = phi.squeeze()
+        phi = phi.squeeze(-1)
         hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0], argnums=0)(
             x, t
         )[0]
@@ -184,6 +173,16 @@ class PINN(nn.Module):
             residual = vmap(self.net_pf, in_axes=(None, 0, 0))(params, x, t)
         else:
             raise ValueError(f"Unknown PDE name: {pde_name}")
+        
+        nabla_phi_fn = jax.jacrev(
+            lambda params, x, t: self.net_u(params, x, t)[0], argnums=1
+        )
+        nabla_phi = vmap(
+            lambda params, x, t: nabla_phi_fn(params, x, t)[0], in_axes=(None, 0, 0)
+        )(params, x, t)
+        grad_phi = jax.lax.stop_gradient(jnp.linalg.norm(nabla_phi, ord=2, axis=-1))
+        weights = 1 / (1 + grad_phi)
+        residual = weights * residual
 
         if not self.cfg.CAUSAL_WEIGHT:
             return jnp.mean(residual**2), {}

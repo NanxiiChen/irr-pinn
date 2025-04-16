@@ -29,7 +29,7 @@ class FractureSampler(Sampler):
         data = shifted_grid(
             self.mins,
             self.maxs,
-            [self.n_samples, self.n_samples, self.n_samples*2],
+            [self.n_samples, self.n_samples, self.n_samples],
             key,
         )
 

@@ -175,7 +175,7 @@ sampler = FractureSampler(
     },
 )
 
-stagger = StaggerSwitch(pde_names=["pf", "stress"], stagger_period=cfg.STAGGER_PERIOD)
+stagger = StaggerSwitch(pde_names=["stress","pf"], stagger_period=cfg.STAGGER_PERIOD)
 
 start_time = time.time()
 for epoch in range(cfg.EPOCHS):

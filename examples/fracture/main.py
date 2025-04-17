@@ -63,12 +63,12 @@ class FracturePINN(PINN):
         # if y > 0, phi = 0
         # elif y < 0, phi = exp(-|y| / l)
         # ux = 0, uy = 0
-        # phi = jnp.exp(-jnp.abs(x[1] / self.cfg.L)) * jnp.where(x[0] < 0, 1, 0)
-        phi = jnp.where(
-            (jnp.abs(x[1]) < self.cfg.L / 2) & (x[0] < 0),
-            1.0,
-            0.0,
-        )
+        phi = jnp.exp(-jnp.abs(x[1] / self.cfg.L)) * jnp.where(x[0] < 0, 1, 0)
+        # phi = jnp.where(
+        #     (jnp.abs(x[1]) < self.cfg.L / 2) & (x[0] < 0),
+        #     1.0,
+        #     0.0,
+        # )
         sol = jnp.stack([phi, 0.0, 0.0], axis=-1)
         return jax.lax.stop_gradient(sol)
 

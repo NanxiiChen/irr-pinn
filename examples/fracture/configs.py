@@ -19,12 +19,12 @@ class Config:
     LOG_DIR = "/root/autodl-tmp/tf-logs"
     PREFIX = "fracture/irr"
     RESUME = None
-    # RESUME = "/root/autodl-tmp/tf-logs/fracture/irr/baseline2-model128_8-stage1-5k//model-5000/"
+    # RESUME = "/root/autodl-tmp/tf-logs/fracture/irr/baseline3-model128_8-stage1-10k-linear_loading//model-10000/"
     # TS = [0.0000, 0.3000, 0.7000, 0.7400, 0.7800]
     TS = [0.0000, 0.2500, 0.5000, 0.8000, 1.0000]
 
-    NUM_LAYERS = 10
-    HIDDEN_DIM = 100
+    NUM_LAYERS = 6
+    HIDDEN_DIM = 400
     OUT_DIM = 3
 
     ACT_NAME = "gelu"
@@ -37,7 +37,7 @@ class Config:
 
     GC = 2.7
     L = 0.024
-    UR = 0.007
+    UR = 0.0075
     LAMBDA = 121.1538e3
     MU = 80.7692e3
     NU = 0.3
@@ -60,7 +60,8 @@ class Config:
 
     @classmethod
     def loading(cls, t):
-        return 0.0075 / jnp.tanh(2.5) * jnp.tanh(2.5* t)
+        # return cls.UR * t
+        return cls.UR / jnp.tanh(2.5) * jnp.tanh(2.5* t)
 
 
 # if __name__ == "__main__":

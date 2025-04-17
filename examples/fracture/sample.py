@@ -122,7 +122,7 @@ class FractureSampler(Sampler):
         )
 
         crack = lhs_sampling(
-            mins=[self.domain[0][0], -0.05, self.domain[2][0] + 0.05],
+            mins=[self.domain[0][0], -0.05, self.domain[2][0]],
             maxs=[0.0, 0.05, self.domain[2][1]],
             num=self.n_samples**2,
             key=self.key,

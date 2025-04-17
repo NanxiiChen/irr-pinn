@@ -190,7 +190,8 @@ for epoch in range(cfg.EPOCHS):
 
     if epoch % cfg.STAGGER_PERIOD == 0:
         batch = sampler.sample(
-            fns=[pinn.net_stress if pde_name == "stress" else pinn.net_pf],
+            # fns=[pinn.net_stress if pde_name == "stress" else pinn.net_pf],
+            fns=[pinn.psi],
             params=state.params,
         )
 

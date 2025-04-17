@@ -148,6 +148,7 @@ state = create_train_state(
     decay=cfg.DECAY,
     decay_every=cfg.DECAY_EVERY,
     xdim=len(cfg.DOMAIN) - 1,
+    optimizer=cfg.OPTIMIZER,
 )
 
 
@@ -183,7 +184,9 @@ for epoch in range(cfg.EPOCHS):
     loss_fn = pinn.loss_fn_stress if pde_name == "stress" else pinn.loss_fn_pf
 
     if epoch % cfg.STAGGER_PERIOD == 0:
-        batch = sampler.sample(fns=[pinn.net_stress, pinn.net_pf], params=state.params)
+        batch = sampler.sample(fns=[
+            pinn.net_stress if pde_name == "stress" else pinn.net_pf
+        ], params=state.params)
 
     state, (weighted_loss, loss_components, weight_components, aux_vars) = train_step(
         loss_fn,

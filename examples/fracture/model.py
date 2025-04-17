@@ -45,8 +45,8 @@ class PINN(nn.Module):
         sol = self.model.apply(params, x, t)
         phi, disp = jnp.split(sol, [1], axis=-1)
         disp = disp / self.cfg.DISP_PRE_SCALE
-        phi = jnp.exp(-jnp.abs(phi))
-        # phi = jax.nn.tanh(phi) / 2 + 0.5
+        # phi = jnp.exp(-jnp.abs(phi))
+        phi = jax.nn.tanh(phi) / 2 + 0.5
         return phi, disp
 
     @partial(jit, static_argnums=(0,))
@@ -153,14 +153,6 @@ class PINN(nn.Module):
     @partial(jit, static_argnums=(0, 4))
     def loss_pde(self, params, batch, eps, pde_name: str):
         x, t = batch
-        # residual = jax.lax.cond(
-        #     pde_name == "stress",
-        #     lambda operand: vmap(self.net_stress, in_axes=(None, 0, 0))(
-        #         params, *operand
-        #     ),
-        #     lambda operand: vmap(self.net_pf, in_axes=(None, 0, 0))(params, *operand),
-        #     operand=(x, t),
-        # )
 
         if pde_name == "stress":
             residual = vmap(self.net_stress, in_axes=(None, 0, 0))(params, x, t)
@@ -173,16 +165,16 @@ class PINN(nn.Module):
             residual = vmap(self.net_pf, in_axes=(None, 0, 0))(params, x, t)
         else:
             raise ValueError(f"Unknown PDE name: {pde_name}")
-        
-        # nabla_phi_fn = jax.jacrev(
-        #     lambda params, x, t: self.net_u(params, x, t)[0], argnums=1
-        # )
-        # nabla_phi = vmap(
-        #     lambda params, x, t: nabla_phi_fn(params, x, t)[0], in_axes=(None, 0, 0)
-        # )(params, x, t)
-        # grad_phi = jax.lax.stop_gradient(jnp.linalg.norm(nabla_phi, ord=2, axis=-1))
-        # weights = 1 / (1 + grad_phi)
-        # residual = weights * residual
+
+        nabla_phi_fn = jax.jacrev(
+            lambda params, x, t: self.net_u(params, x, t)[0], argnums=1
+        )
+        nabla_phi = vmap(
+            lambda params, x, t: nabla_phi_fn(params, x, t)[0], in_axes=(None, 0, 0)
+        )(params, x, t)
+        grad_phi = jax.lax.stop_gradient(jnp.linalg.norm(nabla_phi, ord=2, axis=-1))
+        weights = 1 / (1 + grad_phi)
+        residual = weights * residual
 
         if not self.cfg.CAUSAL_WEIGHT:
             return jnp.mean(residual**2), {}

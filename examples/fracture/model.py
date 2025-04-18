@@ -45,6 +45,7 @@ class PINN(nn.Module):
         sol = self.model.apply(params, x, t)
         phi, disp = jnp.split(sol, [1], axis=-1)
         disp = disp / self.cfg.DISP_PRE_SCALE
+        phi = jnp.exp(-phi**2 * 5)
         # phi = jnp.exp(-jax.nn.sigmoid(phi) * 10)
         # phi = jax.nn.tanh(phi / 3) / 2 + 0.5
         return phi, disp
@@ -165,15 +166,15 @@ class PINN(nn.Module):
         else:
             raise ValueError(f"Unknown PDE name: {pde_name}")
 
-        # nabla_phi_fn = jax.jacrev(
-        #     lambda params, x, t: self.net_u(params, x, t)[0], argnums=1
-        # )
-        # nabla_phi = vmap(
-        #     lambda params, x, t: nabla_phi_fn(params, x, t)[0], in_axes=(None, 0, 0)
-        # )(params, x, t)
-        # grad_phi = jax.lax.stop_gradient(jnp.linalg.norm(nabla_phi, ord=2, axis=-1))
-        # weights = 1 / (1 + grad_phi)
-        # residual = weights * residual
+        nabla_phi_fn = jax.jacrev(
+            lambda params, x, t: self.net_u(params, x, t)[0], argnums=1
+        )
+        nabla_phi = vmap(
+            lambda params, x, t: nabla_phi_fn(params, x, t)[0], in_axes=(None, 0, 0)
+        )(params, x, t)
+        grad_phi = jax.lax.stop_gradient(jnp.linalg.norm(nabla_phi, ord=2, axis=-1))
+        weights = 1 / (1 + grad_phi)
+        residual = weights * residual
 
         if not self.cfg.CAUSAL_WEIGHT:
             return jnp.mean(residual**2), {}

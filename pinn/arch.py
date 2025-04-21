@@ -7,7 +7,7 @@ from jax.nn.initializers import glorot_normal, normal, constant, zeros, uniform
 
 
 class Snake(nn.Module):
-    init_alpha: float = 1.0
+    init_alpha: float = 10.0
 
     @nn.compact
     def __call__(self, x):

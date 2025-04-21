@@ -5,7 +5,7 @@ import jax.numpy as jnp
 from flax import linen as nn
 from jax import jit, random, vmap
 
-from pinn import CausalWeightor, MLP, ModifiedMLP, ResNet
+from pinn import CausalWeightor, MLP, ModifiedMLP, ResNet, MixtureOfExperts
 
 
 class PINN(nn.Module):
@@ -25,7 +25,7 @@ class PINN(nn.Module):
         #     self.loss_bc,
         #     self.loss_irr,
         # ]
-        arch = {"mlp": MLP, "modified_mlp": ModifiedMLP, "resnet": ResNet}
+        arch = {"mlp": MLP, "modified_mlp": ModifiedMLP, "resnet": ResNet, "moe": MixtureOfExperts}
         self.model = arch[self.cfg.ARCH_NAME](
             act_name=self.cfg.ACT_NAME,
             num_layers=self.cfg.NUM_LAYERS,
@@ -45,7 +45,7 @@ class PINN(nn.Module):
         sol = self.model.apply(params, x, t)
         phi, disp = jnp.split(sol, [1], axis=-1)
         disp = disp * t / self.cfg.DISP_PRE_SCALE
-        phi = jnp.exp(-phi**2*10)
+        phi = jnp.exp(-(phi**2) * 10)
         return phi, disp
 
     @partial(jit, static_argnums=(0,))
@@ -73,7 +73,7 @@ class PINN(nn.Module):
         tr_eps = jnp.trace(epsilon)
         pos_energy = (
             (1 / 2)
-            * (self.cfg.LAMBDA + self.cfg.MU *2/self.cfg.DIM)
+            * (self.cfg.LAMBDA + self.cfg.MU * 2 / self.cfg.DIM)
             * ((tr_eps + jnp.abs(tr_eps)) / 2) ** 2
         )
         dev_eps = epsilon - tr_eps * jnp.eye(self.cfg.DIM) / self.cfg.DIM

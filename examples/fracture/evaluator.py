@@ -35,7 +35,7 @@ def evaluate2D(pinn, params, mesh, ref_path, ts, **kwargs):
             mesh[:, 0],
             mesh[:, 1],
             c=pred_phi,
-            cmap="coolwarm",
+            cmap="jet",
             vmin=vmin,
             vmax=vmax,
         )
@@ -56,7 +56,7 @@ def evaluate2D(pinn, params, mesh, ref_path, ts, **kwargs):
             mesh[:, 0],
             mesh[:, 1],
             c=pred_ux,
-            cmap="coolwarm",
+            cmap="jet",
         )
         ax.set(
             xlabel="x",
@@ -75,7 +75,7 @@ def evaluate2D(pinn, params, mesh, ref_path, ts, **kwargs):
             mesh[:, 0],
             mesh[:, 1],
             c=pred_uy,
-            cmap="coolwarm",
+            cmap="jet",
         )
         ax.set(
             xlabel="x",
@@ -123,7 +123,7 @@ def evaluate2D(pinn, params, mesh, ref_path, ts, **kwargs):
 #             mesh[:, 0],
 #             mesh[:, 1],
 #             c=pred_phi,
-#             cmap="coolwarm",
+#             cmap="jet",
 #             vmin=vmin,
 #             vmax=vmax,
 #         )
@@ -144,7 +144,7 @@ def evaluate2D(pinn, params, mesh, ref_path, ts, **kwargs):
 #             mesh[:, 0],
 #             mesh[:, 1],
 #             c=jnp.abs(pred_phi - ref_phi),
-#             cmap="coolwarm",
+#             cmap="jet",
 #         )
 #         ax.set(
 #             xlabel="x",
@@ -165,7 +165,7 @@ def evaluate2D(pinn, params, mesh, ref_path, ts, **kwargs):
 #             mesh[:, 0],
 #             mesh[:, 1],
 #             c=pred_ux,
-#             cmap="coolwarm",
+#             cmap="jet",
 #         )
 #         ax.set(
 #             xlabel="x",
@@ -184,7 +184,7 @@ def evaluate2D(pinn, params, mesh, ref_path, ts, **kwargs):
 #             mesh[:, 0],
 #             mesh[:, 1],
 #             c=jnp.abs(pred_ux - ref_ux),
-#             cmap="coolwarm",
+#             cmap="jet",
 #         )
 #         ax.set(
 #             xlabel="x",
@@ -205,7 +205,7 @@ def evaluate2D(pinn, params, mesh, ref_path, ts, **kwargs):
 #             mesh[:, 0],
 #             mesh[:, 1],
 #             c=pred_uy,
-#             cmap="coolwarm",
+#             cmap="jet",
 #         )
 #         ax.set(
 #             xlabel="x",
@@ -224,7 +224,7 @@ def evaluate2D(pinn, params, mesh, ref_path, ts, **kwargs):
 #             mesh[:, 0],
 #             mesh[:, 1],
 #             c=jnp.abs(pred_uy - ref_uy),
-#             cmap="coolwarm",
+#             cmap="jet",
 #         )
 #         ax.set(
 #             xlabel="x",

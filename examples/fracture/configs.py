@@ -27,7 +27,7 @@ class Config:
     HIDDEN_DIM = 200
     OUT_DIM = 3
 
-    ACT_NAME = "gelu"
+    ACT_NAME = "snake"
     ARCH_NAME = "modified_mlp"
     OPTIMIZER = "adam"
     CHANGE_OPT_AT = 2000

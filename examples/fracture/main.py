@@ -40,7 +40,8 @@ class FracturePINN(PINN):
             self.loss_ic,
             self.loss_bc_bottom_phi,
             self.loss_bc_bottom_u,
-            self.loss_bc_top,
+            self.loss_bc_top_phi,
+            self.loss_bc_top_u,
             self.loss_bc_crack,
             self.loss_irr,
         ]
@@ -89,8 +90,18 @@ class FracturePINN(PINN):
         uy = disp[:, 1]
         bottom = jnp.mean((ux - ref[:, 1]) ** 2) + jnp.mean((uy - ref[:, 2]) ** 2)
         return bottom
+    
+    def loss_bc_top_phi(self, params, batch):
+        x, t = batch
+        phi, _ = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
+        ref = vmap(self.ref_sol_bc_top, in_axes=(0, 0))(x, t)
+        phi = phi[:, 0]
+        top = jnp.mean((phi - ref[:, 2]) ** 2)
+        return top
 
-    def loss_bc_top(self, params, batch):
+
+
+    def loss_bc_top_u(self, params, batch):
         x, t = batch
         _, disp = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
         # ux = disp[:, 0]
@@ -246,14 +257,16 @@ for epoch in range(cfg.EPOCHS):
                 "loss/ic",
                 "loss/bc_bottom_phi",
                 "loss/bc_bottom_u",
-                "loss/bc_top",
+                "loss/bc_top_phi",
+                "loss/bc_top_u",
                 "loss/bc_crack",
                 "loss/irr",
                 f"weight/{pde_name}",
                 "weight/ic",
                 "weight/bc_bottom_phi",
                 "weight/bc_bottom_u",
-                "weight/bc_top",
+                "weight/bc_top_phi",
+                "weight/bc_top_u",
                 "weight/bc_crack",
                 "weight/irr",
                 "error/error_phi",

@@ -2,7 +2,7 @@ import os
 import matplotlib
 from matplotlib import font_manager, rcParams
 
-from .arch import MLP, ModifiedMLP, ResNet
+from .arch import MLP, ModifiedMLP, ResNet, MixtureOfExperts
 from .causal import CausalWeightor
 from .evaluator import evaluate1D, evaluate2D, evaluate3D
 from .metrics import MetricsTracker

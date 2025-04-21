@@ -107,7 +107,7 @@ class MLP(nn.Module):
         else:
             x = jnp.concatenate([x, t], axis=-1)
 
-        for _ in range(self.num_layers - 1):
+        for _ in range(self.num_layers):
             x = Dense(x.shape[-1], self.hidden_dim)(x)
             x = self.act_fn(x)
         return Dense(x.shape[-1], self.out_dim)(x)
@@ -141,7 +141,7 @@ class ResNet(nn.Module):
             x = jnp.concatenate([x, t], axis=-1)
 
         x = Dense(x.shape[-1], self.hidden_dim)(x)
-        for _ in range(self.num_layers - 1):
+        for _ in range(self.num_layers):
             x_res = x
             x = Dense(x.shape[-1], self.hidden_dim)(x)
             x = self.act_fn(x)

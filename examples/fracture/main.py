@@ -226,7 +226,8 @@ for epoch in range(cfg.EPOCHS):
     if epoch % cfg.STAGGER_PERIOD == 0:
 
         # save the model
-        ckpt.save(log_path + f"/model-{epoch}", state)
+        if epoch % (20 * cfg.STAGGER_PERIOD) == 0:
+            ckpt.save(log_path + f"/model-{epoch}", state)
 
         fig, error = evaluate2D(
             pinn,

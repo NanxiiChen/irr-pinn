@@ -5,7 +5,7 @@ class Config:
     EPOCHS = 100000
     N_SAMPLES = 20
     ADAPTIVE_SAMPLES = 1500
-    ADAPTIVE_BASE_RATE = 3
+    ADAPTIVE_BASE_RATE = 5
     LR = 5e-4
     DECAY = 0.9
     DECAY_EVERY = 2000
@@ -38,7 +38,7 @@ class Config:
 
     GC = 2.7
     L = 0.024
-    UR = 0.0065
+    UR = 0.007
     LAMBDA = 121.1538e3
     MU = 80.7692e3
     NU = 0.3
@@ -46,12 +46,12 @@ class Config:
     Lc = 1.0
     Tc = 1.0
     DISP_PRE_SCALE = 1e2
-    STRESS_PRE_SCALE = 1e8
+    STRESS_PRE_SCALE = 1e5
     PF_PRE_SCALE = 1e2
 
     CAUSAL_CONFIGS = {
-        "stress_eps": 1e-2,
-        "pf_eps": 1e-2,
+        "stress_eps": 1e-1,
+        "pf_eps": 1e-1,
         "step_size": 5,
         "max_last_weight": 0.99,
         "min_mean_weight": 0.5,
@@ -62,7 +62,7 @@ class Config:
     @classmethod
     def loading(cls, t):
         # return cls.UR * t
-        return cls.UR / jnp.tanh(2.5) * jnp.tanh(2.5* t)
+        return cls.UR / jnp.tanh(2) * jnp.tanh(2.* t)
 
 
 # if __name__ == "__main__":

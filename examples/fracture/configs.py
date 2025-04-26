@@ -3,8 +3,8 @@ from jax import numpy as jnp
 
 class Config:
     EPOCHS = 100000
-    N_SAMPLES = 25
-    ADAPTIVE_SAMPLES = 8000
+    N_SAMPLES = 20
+    ADAPTIVE_SAMPLES = 5000
     ADAPTIVE_BASE_RATE = 5
     LR = 5e-4
     DECAY = 0.9

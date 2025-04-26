@@ -46,6 +46,7 @@ class PINN(nn.Module):
         phi, disp = jnp.split(sol, [1], axis=-1)
         disp = disp * t / self.cfg.DISP_PRE_SCALE
         phi = jnp.exp(-(phi**2) * 10)
+        # phi = jnp.tanh(phi) / 2 + 0.5
         return phi, disp
 
     @partial(jit, static_argnums=(0,))

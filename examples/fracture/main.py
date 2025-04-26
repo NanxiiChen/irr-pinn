@@ -214,8 +214,8 @@ for epoch in range(cfg.EPOCHS):
 
     if epoch % cfg.STAGGER_PERIOD == 0:
         batch = sampler.sample(
-            fns=[pinn.net_stress if pde_name == "stress" else pinn.net_pf],
-            # fns=[pinn.psi],
+            # fns=[pinn.net_stress if pde_name == "stress" else pinn.net_pf],
+            fns=[pinn.psi],
             params=state.params,
         )
 
@@ -238,27 +238,26 @@ for epoch in range(cfg.EPOCHS):
     if epoch % cfg.STAGGER_PERIOD == 0:
 
         # save the model
-        if epoch % (20 * cfg.STAGGER_PERIOD) == 0:
+        if epoch % (10 * cfg.STAGGER_PERIOD) == 0:
             ckpt.save(log_path + f"/model-{epoch}", state)
 
-        fig, error = evaluate2D(
-            pinn,
-            state.params,
-            jnp.load(f"{cfg.DATA_PATH}/mesh_points.npy"),
-            cfg.DATA_PATH,
-            ts=cfg.TS,
-            Lc=cfg.Lc,
-            Tc=cfg.Tc,
-            val_range=(0, 1),
-            xlim=cfg.DOMAIN[0],
-            ylim=cfg.DOMAIN[1],
-        )
+            fig, error = evaluate2D(
+                pinn,
+                state.params,
+                jnp.load(f"{cfg.DATA_PATH}/mesh_points.npy"),
+                cfg.DATA_PATH,
+                ts=cfg.TS,
+                Lc=cfg.Lc,
+                Tc=cfg.Tc,
+                val_range=(0, 1),
+                xlim=cfg.DOMAIN[0],
+                ylim=cfg.DOMAIN[1],
+            )
+            metrics_tracker.register_figure(epoch, fig, "error")
+            plt.close(fig)
 
         print(
             f"Epoch: {epoch}, "
-            f"Error_phi: {error[0]:.2e}, "
-            f"Error_ux: {error[1]:.2e}, "
-            f"Error_uy: {error[2]:.2e}, "
             f"Loss_{pde_name}: {loss_components[0]:.2e}, "
         )
 
@@ -280,14 +279,13 @@ for epoch in range(cfg.EPOCHS):
                 "weight/bc_crack",
                 "weight/bc_right",
                 "weight/irr",
-                "error/error_phi",
-                "error/error_ux",
-                "error/error_uy",
+                # "error/error_phi",
+                # "error/error_ux",
+                # "error/error_uy",
             ],
-            values=[weighted_loss, *loss_components, *weight_components, *error],
+            values=[weighted_loss, *loss_components, *weight_components, ],
         )
-        metrics_tracker.register_figure(epoch, fig, "error")
-        plt.close(fig)
+
 
         if cfg.CAUSAL_WEIGHT:
             fig = pinn.causal_weightor.plot_causal_info(

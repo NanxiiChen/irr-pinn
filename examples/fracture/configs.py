@@ -3,7 +3,7 @@ from jax import numpy as jnp
 
 class Config:
     EPOCHS = 100000
-    N_SAMPLES = 20
+    N_SAMPLES = 25
     ADAPTIVE_SAMPLES = 8000
     ADAPTIVE_BASE_RATE = 5
     LR = 5e-4
@@ -30,7 +30,7 @@ class Config:
     ACT_NAME = "snake"
     ARCH_NAME = "modified_mlp"
     OPTIMIZER = "adam"
-    CHANGE_OPT_AT = 10000
+    CHANGE_OPT_AT = 100000
     ASYMMETRIC = True
     FOURIER_EMB = False
     CAUSAL_WEIGHT = True
@@ -38,7 +38,7 @@ class Config:
 
     GC = 2.7
     L = 0.024
-    UR = 0.0075
+    UR = 0.0070
     LAMBDA = 121.1538e3
     MU = 80.7692e3
     NU = 0.3

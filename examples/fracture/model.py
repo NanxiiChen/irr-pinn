@@ -45,9 +45,9 @@ class PINN(nn.Module):
         sol = self.model.apply(params, x, t)
         phi, disp = jnp.split(sol, [1], axis=-1)
         disp = disp * t / self.cfg.DISP_PRE_SCALE
-        # phi = jnp.exp(-jnp.abs(phi)*10)
+        phi = jnp.exp(-phi**2*10)
         # phi = jnp.tanh(phi) / 2 + 0.5
-        phi = jnp.exp(-jax.nn.sigmoid(phi*10)*10)
+        # phi = jnp.exp(-jax.nn.sigmoid(phi*10)*10)
         return phi, disp
 
     @partial(jit, static_argnums=(0,))

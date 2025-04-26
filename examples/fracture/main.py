@@ -219,7 +219,7 @@ for epoch in range(cfg.EPOCHS):
 
     if epoch % cfg.STAGGER_PERIOD == 0:
         batch = sampler.sample(
-            fns=[pinn.psi, getattr(pinn, f"net_{pde_name}")],
+            fns=[pinn.psi,],
             params=state.params,
         )
 

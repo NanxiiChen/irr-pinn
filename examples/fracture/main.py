@@ -42,7 +42,7 @@ class FracturePINN(PINN):
             self.loss_bc_bottom_u,
             self.loss_bc_top_u,
             self.loss_bc_crack,
-            self.loss_bc_right,
+            # self.loss_bc_right,
             # self.loss_bc_sigmax,
             self.loss_irr,
         ]
@@ -219,7 +219,7 @@ for epoch in range(cfg.EPOCHS):
 
     if epoch % cfg.STAGGER_PERIOD == 0:
         batch = sampler.sample(
-            fns=[pinn.psi,],
+            fns=[pinn.psi, getattr(pinn, f"net_{pde_name}")],
             params=state.params,
         )
 
@@ -271,14 +271,16 @@ for epoch in range(cfg.EPOCHS):
                 "loss/bc_bottom_u",
                 "loss/bc_top_u",
                 "loss/bc_crack",
-                "loss/bc_right",
+                # "loss/bc_right",
+                # "loss/bc_sigmax",
                 "loss/irr",
                 f"weight/{pde_name}",
                 "weight/ic",
                 "weight/bc_bottom_u",
                 "weight/bc_top_u",
                 "weight/bc_crack",
-                "weight/bc_right",
+                # "weight/bc_right",
+                # "weight/bc_sigmax",
                 "weight/irr",
                 # "error/error_phi",
                 # "error/error_ux",

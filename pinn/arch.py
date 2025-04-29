@@ -260,7 +260,7 @@ class ModifiedMLP(nn.Module):
 
         for _ in range(self.num_layers):
             x = Dense(x.shape[-1], self.hidden_dim)(x)
-            x = self.act_fn(x)
+            x = nn.tanh(x)
             x = x * u + (1 - x) * v
 
         return Dense(x.shape[-1], self.out_dim)(x)

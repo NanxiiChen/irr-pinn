@@ -9,7 +9,7 @@ class Config:
     LR = 5e-4
     DECAY = 0.9
     DECAY_EVERY = 1000
-    STAGGER_PERIOD = 5
+    STAGGER_PERIOD = 25
     EMB_SCALE = (2.0, 2.0)  # emb sacle for (x, t)
     EMB_DIM = 64
 
@@ -33,7 +33,7 @@ class Config:
     CHANGE_OPT_AT = 5000000
     ASYMMETRIC = True
     FOURIER_EMB = False
-    CAUSAL_WEIGHT = False
+    CAUSAL_WEIGHT = True
     IRR = True
 
     GC = 2.7

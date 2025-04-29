@@ -9,7 +9,7 @@ class Config:
     LR = 5e-4
     DECAY = 0.9
     DECAY_EVERY = 1000
-    STAGGER_PERIOD = 10
+    STAGGER_PERIOD = 5
     EMB_SCALE = (2.0, 2.0)  # emb sacle for (x, t)
     EMB_DIM = 64
 
@@ -23,22 +23,22 @@ class Config:
     # TS = [0.0000, 0.3000, 0.7000, 0.7400, 0.7800]
     TS = [0.0000, 0.2500, 0.5000, 0.8000, 1.0000]
 
-    NUM_LAYERS = 4
-    HIDDEN_DIM = 400
+    NUM_LAYERS = 6
+    HIDDEN_DIM = 200
     OUT_DIM = 3
 
-    ACT_NAME = "snake"
+    ACT_NAME = "swish"
     ARCH_NAME = "modified_mlp"
     OPTIMIZER = "adam"
     CHANGE_OPT_AT = 5000000
     ASYMMETRIC = True
     FOURIER_EMB = False
-    CAUSAL_WEIGHT = False
+    CAUSAL_WEIGHT = True
     IRR = True
 
     GC = 2.7
     L = 0.024
-    UR = 0.0070
+    UR = 0.0065
     LAMBDA = 121.1538e3
     MU = 80.7692e3
     NU = 0.3

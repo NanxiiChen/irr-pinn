@@ -72,18 +72,20 @@ class PINN(nn.Module):
     def psi(self, params, x, t):
         # psi: scalar
         epsilon = self.epsilon(params, x, t)
-        # tr_eps = jnp.trace(epsilon)
-        # pos_energy = (
-        #     (1 / 2)
-        #     * (self.cfg.LAMBDA + self.cfg.MU * 2 / self.cfg.DIM)
-        #     * ((tr_eps + jnp.abs(tr_eps)) / 2) ** 2
-        # )
-        # dev_eps = epsilon - tr_eps * jnp.eye(self.cfg.DIM) / self.cfg.DIM
-        # # l2_eps = jnp.linalg.norm(dev_eps, ord=2) ** 2
-        # tr_deveps2 = jnp.linalg.trace(dev_eps @ dev_eps)
-        # return pos_energy + self.cfg.MU * tr_deveps2
-        return self.cfg.LAMBDA * jnp.linalg.trace(epsilon) ** 2 / 2 \
-            + self.cfg.MU * jnp.linalg.trace(epsilon @ epsilon)
+        tr_eps = jnp.trace(epsilon)
+        pos_energy = (
+            (1 / 2)
+            * (self.cfg.LAMBDA + self.cfg.MU * 2 / self.cfg.DIM)
+            * ((tr_eps + jnp.abs(tr_eps)) / 2) ** 2
+        )
+        dev_eps = epsilon - tr_eps * jnp.eye(self.cfg.DIM) / self.cfg.DIM
+        # l2_eps = jnp.linalg.norm(dev_eps, ord=2) ** 2
+        tr_deveps2 = jnp.linalg.trace(dev_eps @ dev_eps)
+        return pos_energy + self.cfg.MU * tr_deveps2
+    
+        # without the tension-compression decomposition
+        # return self.cfg.LAMBDA * jnp.linalg.trace(epsilon) ** 2 / 2 \
+        #     + self.cfg.MU * jnp.linalg.trace(epsilon @ epsilon)
 
     @partial(jit, static_argnums=(0,))
     def net_stress(self, params, x, t):

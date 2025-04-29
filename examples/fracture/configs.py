@@ -3,7 +3,7 @@ from jax import numpy as jnp
 
 class Config:
     EPOCHS = 100000
-    N_SAMPLES = 30
+    N_SAMPLES = 15
     ADAPTIVE_SAMPLES = 500
     ADAPTIVE_BASE_RATE = 5
     LR = 5e-4
@@ -24,7 +24,7 @@ class Config:
     TS = [0.0000, 0.2500, 0.5000, 0.8000, 1.0000]
 
     NUM_LAYERS = 6
-    HIDDEN_DIM = 200
+    HIDDEN_DIM = 400
     OUT_DIM = 3
 
     ACT_NAME = "swish"
@@ -33,7 +33,7 @@ class Config:
     CHANGE_OPT_AT = 5000000
     ASYMMETRIC = True
     FOURIER_EMB = False
-    CAUSAL_WEIGHT = True
+    CAUSAL_WEIGHT = False
     IRR = True
 
     GC = 2.7

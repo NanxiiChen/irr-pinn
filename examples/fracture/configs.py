@@ -8,9 +8,9 @@ class Config:
     ADAPTIVE_BASE_RATE = 5
     LR = 5e-4
     DECAY = 0.9
-    DECAY_EVERY = 1000
+    DECAY_EVERY = 500
     STAGGER_PERIOD = 25
-    EMB_SCALE = (2.0, 2.0)  # emb sacle for (x, t)
+    EMB_SCALE = (4, 4)  # emb sacle for (x, t)
     EMB_DIM = 64
 
     DOMAIN = [[-0.5, 0.5], [-0.5, 0.5], [0, 1.0]]
@@ -38,7 +38,7 @@ class Config:
 
     GC = 2.7
     L = 0.024
-    UR = 0.0065
+    UR = 0.0070
     LOAD_ON_DIR = "y"
     LOAD_ON = 1 if LOAD_ON_DIR == "y" else 0
     LAMBDA = 121.1538e3
@@ -48,7 +48,7 @@ class Config:
     Lc = 1.0
     Tc = 1.0
     DISP_PRE_SCALE = 1e2
-    STRESS_PRE_SCALE = 1e5
+    STRESS_PRE_SCALE = 1e4
     PF_PRE_SCALE = 1e2
 
     CAUSAL_CONFIGS = {

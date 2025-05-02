@@ -46,7 +46,7 @@ class PINN(nn.Module):
     def net_u(self, params, x, t):
         sol = self.model.apply(params, x, t)
         phi, disp = jnp.split(sol, [1], axis=-1)
-        disp = disp * t / self.cfg.DISP_PRE_SCALE
+        disp = disp / self.cfg.DISP_PRE_SCALE
         phi = jnp.exp(-phi**2*10)
         # phi = jnp.tanh(phi) / 2 + 0.5
         # phi = jnp.exp(-jax.nn.sigmoid(phi*10)*10)
@@ -155,20 +155,20 @@ class PINN(nn.Module):
     def loss_pde(self, params, batch, eps, pde_name: str):
         x, t = batch
 
-        if pde_name == "stress":
-            residual = vmap(self.net_stress, in_axes=(None, 0, 0))(params, x, t)
-            mse_res = jnp.mean(residual**2, axis=0)
-            weights = jax.lax.stop_gradient(
-                jnp.sqrt(jnp.sum(mse_res, axis=-1) / (mse_res + 1e-6))
-            )
-            residual = jnp.sum(jnp.abs(residual) * weights, axis=-1)
-        elif pde_name == "pf":
-            residual = vmap(self.net_pf, in_axes=(None, 0, 0))(params, x, t)
-        else:
-            raise ValueError(f"Unknown PDE name: {pde_name}")
+        # if pde_name == "stress":
+        #     residual = vmap(self.net_stress, in_axes=(None, 0, 0))(params, x, t)
+        #     mse_res = jnp.mean(residual**2, axis=0)
+        #     weights = jax.lax.stop_gradient(
+        #         jnp.sqrt(jnp.sum(mse_res, axis=-1) / (mse_res + 1e-6))
+        #     )
+        #     residual = jnp.sum(jnp.abs(residual) * weights, axis=-1)
+        # elif pde_name == "pf":
+        #     residual = vmap(self.net_pf, in_axes=(None, 0, 0))(params, x, t)
+        # else:
+        #     raise ValueError(f"Unknown PDE name: {pde_name}")
 
-        # fn = getattr(self, f"net_{pde_name}")
-        # residual = vmap(fn, in_axes=(None, 0, 0))(params, x, t)
+        fn = getattr(self, f"net_{pde_name}")
+        residual = vmap(fn, in_axes=(None, 0, 0))(params, x, t)
 
         nabla_phi_fn = jax.jacrev(
             lambda params, x, t: self.net_u(params, x, t)[0], argnums=1
@@ -176,14 +176,17 @@ class PINN(nn.Module):
         nabla_phi = vmap(
             lambda params, x, t: nabla_phi_fn(params, x, t)[0], in_axes=(None, 0, 0)
         )(params, x, t)
-        grad_phi = jax.lax.stop_gradient(jnp.linalg.norm(nabla_phi, ord=2, axis=-1))
+        # grad_phi = jax.lax.stop_gradient(jnp.linalg.norm(nabla_phi, ord=2, axis=-1))
+        grad_phi = jax.lax.stop_gradient(jnp.sum(nabla_phi**2, axis=-1))
         weights = 1 / (1 + grad_phi)
         residual = weights * residual
 
         if not self.cfg.CAUSAL_WEIGHT:
-            return jnp.mean(residual**2), {}
+            return jnp.mean(residual**2), {"weights": weights}
         else:
-            return self.causal_weightor.compute_causal_loss(residual, t, eps)
+            loss, aux_vars = self.causal_weightor.compute_causal_loss(residual, t, eps)
+            aux_vars.update({"weights": weights})
+            return loss, aux_vars
 
     def loss_ic(self, params, batch):
         raise NotImplementedError

@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 from flax import linen as nn
 from jax.nn.initializers import glorot_normal, normal, constant, zeros, uniform
+from .embeddings import FourierEmbedding, WaveletEmbedding
 
 
 class Snake(nn.Module):
@@ -32,61 +33,6 @@ class Dense(nn.Module):
         return jnp.dot(x, self.kernel) + self.bias
 
 
-class FourierEmbedding(nn.Module):
-    emb_scale: float = 2.0
-    emb_dim: int = 64
-
-    @nn.compact
-    def __call__(self, x):
-        kernel = self.param(
-            "kernel",
-            normal(self.emb_scale),
-            (x.shape[-1], self.emb_dim),
-        )
-        return jnp.concatenate(
-            [
-                jnp.sin(jnp.pi * jnp.dot(x, kernel)),
-                jnp.cos(jnp.pi * jnp.dot(x, kernel)),
-            ],
-            axis=-1,
-        )
-
-
-class RBFEmbedding(nn.Module):
-    emb_dim: int = 64
-    emb_scale: float = 0.1
-    emb_width: float = 0.05
-
-    @nn.compact
-    def __call__(self, x):
-
-        centers = self.param(
-            "kernel",
-            normal(self.emb_scale),
-            (self.emb_dim, x.shape[-1]),
-        )  # --> shape (emb_dim, xdim)
-
-        x = jnp.expand_dims(x, axis=0)
-        dist_sq = jnp.sum((x - centers) ** 2, axis=-1)
-        rbf = jnp.exp(-dist_sq / (2 * self.emb_width**2))
-        return rbf
-
-
-class ExponentialEmbedding(nn.Module):
-    emb_scale: float = 2.0
-    emb_dim: int = 32
-
-    @nn.compact
-    def __call__(self, x):
-        low, high = 1 / self.emb_scale, self.emb_scale
-
-        def kernel_init(key, shape, dtype=jnp.float32):
-            return jax.random.uniform(key, shape, dtype=dtype, minval=low, maxval=high)
-
-        kernel = self.param("kernel", kernel_init, (x.shape[-1], self.emb_dim))
-        x = jnp.dot(x, jnp.ones((x.shape[-1], self.emb_dim)))
-        x = x**kernel
-        return x.reshape(-1)
 
 
 class MLP(nn.Module):
@@ -246,8 +192,8 @@ class ModifiedMLP(nn.Module):
     def __call__(self, x, t):
 
         if self.fourier_emb:
-            t_emb = FourierEmbedding(self.emb_scale[1], self.emb_dim)(t)
-            x_emb = FourierEmbedding(self.emb_scale[0], self.emb_dim)(t)
+            t_emb = WaveletEmbedding(self.emb_scale[1], self.emb_dim)(t)
+            x_emb = WaveletEmbedding(self.emb_scale[0], self.emb_dim)(t)
             # x_emb = RBFEmbedding()(x)
             x = jnp.concatenate([x_emb, t_emb], axis=-1)
         else:
@@ -264,6 +210,7 @@ class ModifiedMLP(nn.Module):
             x = x * u + (1 - x) * v
 
         return Dense(x.shape[-1], self.out_dim)(x)
+
 
 
 class ExpertMLP(nn.Module):

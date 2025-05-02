@@ -38,7 +38,8 @@ class FracturePINN(PINN):
         super().__init__(*args, **kwargs)
         self.loss_fn_panel = [
             self.loss_pde,
-            self.loss_ic,
+            self.loss_ic_phi,
+            self.loss_ic_u,
             self.loss_bc_bottom_u,
             # self.loss_bc_bottom_phi,
             self.loss_bc_top_u,
@@ -61,16 +62,29 @@ class FracturePINN(PINN):
         phi = jnp.exp(-jnp.abs(x[1] / self.cfg.L))
         return jax.lax.stop_gradient(phi)
 
-    def ref_sol_ic(self, x, t):
+    def ref_sol_ic_phi(self, x, t):
         phi = jnp.exp(-jnp.abs(x[1] / self.cfg.L)) * (1 - jax.nn.sigmoid(x[0] * 200))
         return jax.lax.stop_gradient(phi)
 
-    def loss_ic(self, params, batch):
+    # def loss_ic(self, params, batch):
+    #     x, t = batch
+    #     phi, _ = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
+    #     phi = phi[:, 0]
+    #     ref = vmap(self.ref_sol_ic, in_axes=(0, 0))(x, t)
+    #     return jnp.mean((phi - ref) ** 2)
+    def loss_ic_phi(self, params, batch):
         x, t = batch
         phi, _ = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
         phi = phi[:, 0]
-        ref = vmap(self.ref_sol_ic, in_axes=(0, 0))(x, t)
+        ref = vmap(self.ref_sol_ic_phi, in_axes=(0, 0))(x, t)
         return jnp.mean((phi - ref) ** 2)
+    
+    def loss_ic_u(self, params, batch):
+        x, t = batch
+        _, disp = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
+        ux = disp[:, 0]
+        uy = disp[:, 1]
+        return jnp.mean(ux** 2) + jnp.mean(uy ** 2)
 
     def loss_bc_bottom_phi(self, params, batch):
         x, t = batch
@@ -194,7 +208,7 @@ sampler = FractureSampler(
     },
 )
 
-stagger = StaggerSwitch(pde_names=["stress", "pf", ], stagger_period=cfg.STAGGER_PERIOD)
+stagger = StaggerSwitch(pde_names=["stress_x", "stress_y", "pf", ], stagger_period=cfg.STAGGER_PERIOD)
 
 start_time = time.time()
 for epoch in range(cfg.EPOCHS):
@@ -265,24 +279,19 @@ for epoch in range(cfg.EPOCHS):
             names=[
                 "loss/weighted",
                 f"loss/{pde_name}",
-                "loss/ic",
+                "loss/ic_phi",
+                "loss/ic_u",
                 "loss/bc_bottom_u",
                 "loss/bc_top_u",
                 "loss/bc_crack",
-                # "loss/bc_right",
-                # "loss/bc_sigmax",
                 "loss/irr",
                 f"weight/{pde_name}",
-                "weight/ic",
+                "weight/ic_phi",
+                "weight/ic_u",
                 "weight/bc_bottom_u",
                 "weight/bc_top_u",
                 "weight/bc_crack",
-                # "weight/bc_right",
-                # "weight/bc_sigmax",
                 "weight/irr",
-                # "error/error_phi",
-                # "error/error_ux",
-                # "error/error_uy",
             ],
             values=[
                 weighted_loss,

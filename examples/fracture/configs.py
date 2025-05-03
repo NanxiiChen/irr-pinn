@@ -10,7 +10,7 @@ class Config:
     DECAY = 0.9
     DECAY_EVERY = 500
     STAGGER_PERIOD = 25
-    EMB_SCALE = (2, 2)  # emb sacle for (x, t)
+    EMB_SCALE = (1, 1)  # emb sacle for (x, t)
     EMB_DIM = 64
 
     DOMAIN = [[-0.5, 0.5], [-0.5, 0.5], [0, 1.0]]
@@ -38,7 +38,7 @@ class Config:
 
     GC = 2.7
     L = 0.024
-    UR = 0.0060
+    UR = 0.0065
     LOAD_ON_DIR = "y"
     LOAD_ON = 1 if LOAD_ON_DIR == "y" else 0
     LAMBDA = 121.1538e3

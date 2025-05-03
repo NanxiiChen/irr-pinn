@@ -193,7 +193,7 @@ class ModifiedMLP(nn.Module):
 
         if self.fourier_emb:
             t_emb = FourierEmbedding(self.emb_scale[1], self.emb_dim)(t)
-            x_emb = FourierEmbedding(self.emb_scale[0], self.emb_dim)(t)
+            x_emb = FourierEmbedding(self.emb_scale[0], self.emb_dim)(x)
             # x_emb = RBFEmbedding()(x)
             x = jnp.concatenate([x_emb, t_emb], axis=-1)
         else:
@@ -207,6 +207,7 @@ class ModifiedMLP(nn.Module):
         for _ in range(self.num_layers):
             x = Dense(x.shape[-1], self.hidden_dim)(x)
             x = nn.tanh(x)
+            # x = self.act_fn(x)
             x = x * u + (1 - x) * v
 
         return Dense(x.shape[-1], self.out_dim)(x)

@@ -14,17 +14,13 @@ class PINN(nn.Module):
         self,
         config: object = None,
         causal_weightor: CausalWeightor = None,
+        **kwargs,
     ):
         super().__init__()
 
+        loss_terms = kwargs.get("loss_terms", [])
+        self.loss_fn_panel = [getattr(self, f"loss_{term}") for term in loss_terms]
         self.cfg = config
-        self.flux_idx = 1
-        # self.loss_fn_panel = [
-        #     self.loss_pde,
-        #     self.loss_ic,
-        #     self.loss_bc,
-        #     self.loss_irr,
-        # ]
         arch = {
             "mlp": MLP,
             "modified_mlp": ModifiedMLP,
@@ -182,15 +178,19 @@ class PINN(nn.Module):
             residual = jnp.sum(jnp.abs(residual) * weights, axis=-1)
 
         # point-wise weight
-        nabla_phi_fn = jax.jacrev(
-            lambda params, x, t: self.net_u(params, x, t)[0], argnums=1
-        )
-        nabla_phi = vmap(
-            lambda params, x, t: nabla_phi_fn(params, x, t)[0], in_axes=(None, 0, 0)
-        )(params, x, t)
-        grad_phi = jax.lax.stop_gradient(jnp.sum(nabla_phi**2, axis=-1))
-        weights = 1 / (1 + grad_phi)
-        residual = weights * residual
+        if self.cfg.POINT_WISE_WEIGHT:
+            nabla_phi_fn = jax.jacrev(
+                lambda params, x, t: self.net_u(params, x, t)[0], argnums=1
+            )
+            nabla_phi = vmap(
+                lambda params, x, t: nabla_phi_fn(params, x, t)[0], in_axes=(None, 0, 0)
+            )(params, x, t)
+            grad_phi = jnp.sum(nabla_phi**2, axis=-1)
+            weights = jax.lax.stop_gradient(1 / (1 + grad_phi))
+            # weights = jax.lax.stop_gradient(jnp.exp(-grad_phi))
+            residual = weights * residual
+        else:
+            weights = jax.lax.stop_gradient(jnp.ones_like(residual))
 
         if not self.cfg.CAUSAL_WEIGHT:
             return jnp.mean(residual**2), {"weights": weights}
@@ -205,10 +205,10 @@ class PINN(nn.Module):
     def loss_bc(self, params, batch):
         raise NotImplementedError
 
-    def loss_irr(self, params, batch):
+    def loss_irr(self, params, batch, *args, **kwargs):
         x, t = batch
         dphi_dt = vmap(self.net_speed, in_axes=(None, 0, 0))(params, x, t)
-        return jnp.mean(jax.nn.relu(-dphi_dt))
+        return jnp.mean(jax.nn.relu(-dphi_dt)), {}
 
     # def loss_flux(self, params, batch):
     #     x, t = batch
@@ -228,15 +228,19 @@ class PINN(nn.Module):
         for idx, (loss_item_fn, batch_item) in enumerate(
             zip(self.loss_fn_panel, batch)
         ):
-            if idx == 0:
-                (loss_item, aux), grad_item = jax.value_and_grad(
-                    loss_item_fn, has_aux=True
-                )(params, batch_item, eps, pde_name)
-                aux_vars.update(aux)
-            else:
-                loss_item, grad_item = jax.value_and_grad(loss_item_fn)(
-                    params, batch_item
-                )
+            # if idx == 0:
+            #     (loss_item, aux), grad_item = jax.value_and_grad(
+            #         loss_item_fn, has_aux=True
+            #     )(params, batch_item, eps, pde_name)
+            #     aux_vars.update(aux)
+            # else:
+            #     (loss_item, aux), grad_item = jax.value_and_grad(loss_item_fn)(
+            #         params, batch_item
+            #     )
+            (loss_item, aux), grad_item = jax.value_and_grad(
+                loss_item_fn, has_aux=True
+            )(params, batch_item, eps, pde_name)
+            aux_vars.update(aux)
             losses.append(loss_item)
             grads.append(grad_item)
 
@@ -257,7 +261,7 @@ class PINN(nn.Module):
         return jnp.sum(weights * losses), (losses, weights, aux_vars)
 
     @partial(jit, static_argnums=(0,))
-    def grad_norm_weights(self, grads: list, eps=1e-6):
+    def grad_norm_weights(self, grads: list, eps=1e-8):
         def tree_norm(pytree):
             squared_sum = sum(jnp.sum(x**2) for x in jax.tree_util.tree_leaves(pytree))
             return jnp.sqrt(squared_sum)

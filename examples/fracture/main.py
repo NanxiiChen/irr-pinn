@@ -36,19 +36,6 @@ from pinn import (
 class FracturePINN(PINN):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.loss_fn_panel = [
-            self.loss_pde,
-            self.loss_ic_phi,
-            self.loss_ic_u,
-            self.loss_bc_bottom_u,
-            # self.loss_bc_bottom_phi,
-            self.loss_bc_top_u,
-            self.loss_bc_crack,
-            # self.loss_bc_right,
-            # self.loss_bc_sigmax,
-            self.loss_irr,
-        ]
-        self.flux_idx = 1
 
     def ref_sol_bc_top(self, x, t):
         # uy = 0.007 * 0.78 / np.tanh(3) * np.tanh(3 * t)
@@ -66,70 +53,77 @@ class FracturePINN(PINN):
         phi = jnp.exp(-jnp.abs(x[1] / self.cfg.L)) * (1 - jax.nn.sigmoid(x[0] * 200))
         return jax.lax.stop_gradient(phi)
 
-    # def loss_ic(self, params, batch):
+    # def loss_ic(self, params, batch, *args, **kwargs):
     #     x, t = batch
     #     phi, _ = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
     #     phi = phi[:, 0]
     #     ref = vmap(self.ref_sol_ic, in_axes=(0, 0))(x, t)
     #     return jnp.mean((phi - ref) ** 2)
-    def loss_ic_phi(self, params, batch):
+    def loss_ic_phi(self, params, batch, *args, **kwargs):
         x, t = batch
         phi, _ = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
         phi = phi[:, 0]
         ref = vmap(self.ref_sol_ic_phi, in_axes=(0, 0))(x, t)
-        return jnp.mean((phi - ref) ** 2)
+        return jnp.mean((phi - ref) ** 2), {}
 
-    def loss_ic_u(self, params, batch):
+    def loss_ic_ux(self, params, batch, *args, **kwargs):
         x, t = batch
         _, disp = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
         ux = disp[:, 0]
-        uy = disp[:, 1]
-        return jnp.mean(ux**2) + jnp.mean(uy**2)
+        icux = jnp.mean(ux**2)
+        return icux, {}
 
-    def loss_bc_bottom_phi(self, params, batch):
+    def loss_ic_uy(self, params, batch, *args, **kwargs):
+        x, t = batch
+        _, disp = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
+        uy = disp[:, 1]
+        icuy = jnp.mean(uy**2)
+        return icuy, {}
+
+    def loss_bc_bottom_phi(self, params, batch, *args, **kwargs):
         x, t = batch
         phi, _ = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
         ref = vmap(self.ref_sol_bc_bottom, in_axes=(0, 0))(x, t)
         phi = phi[:, 0]
         bottom = jnp.mean((phi - ref[:, 0]) ** 2)
-        return bottom
+        return bottom, {}
 
-    def loss_bc_bottom_u(self, params, batch):
+    def loss_bc_bottom_ux(self, params, batch, *args, **kwargs):
         x, t = batch
         _, disp = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
-        ref = vmap(self.ref_sol_bc_bottom, in_axes=(0, 0))(x, t)
         ux = disp[:, 0]
-        uy = disp[:, 1]
-        bottom = jnp.mean((ux - ref[:, 1]) ** 2) + jnp.mean((uy - ref[:, 2]) ** 2)
-        return bottom
+        bottom = jnp.mean(ux**2)
+        return bottom, {}
 
-    def loss_bc_top_phi(self, params, batch):
+    def loss_bc_bottom_uy(self, params, batch, *args, **kwargs):
+        x, t = batch
+        _, disp = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
+        uy = disp[:, 1]
+        bottom = jnp.mean(uy**2)
+        return bottom, {}
+
+    def loss_bc_top_phi(self, params, batch, *args, **kwargs):
         x, t = batch
         phi, _ = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
         ref = vmap(self.ref_sol_bc_top, in_axes=(0, 0))(x, t)
         phi = phi[:, 0]
         top = jnp.mean((phi - ref[:, 2]) ** 2)
-        return top
+        return top, {}
 
-    def loss_bc_top_u(self, params, batch):
+    def loss_bc_top_uy(self, params, batch, *args, **kwargs):
         x, t = batch
         _, disp = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
         ref = vmap(self.ref_sol_bc_top, in_axes=(0, 0))(x, t)
-        # ux should be constant using poisson coefficient `nu`
-        # epsilon = vmap(self.epsilon, in_axes=(None, 0, 0))(
-        #     params, x, t
-        # )
-        # eps_xx = epsilon[:, 0, 0]
-        # eps_yy = epsilon[:, 1, 1]
-        # load on ux
-        # top = jnp.mean((disp[:, self.cfg.LOAD_ON] - ref) ** 2) + jnp.mean(
-        #     disp[:, 1 - self.cfg.LOAD_ON] ** 2
-        # )
-        # load on uy
         top = jnp.mean((disp[:, self.cfg.LOAD_ON] - ref) ** 2)
-        return top
+        return top, {}
 
-    def loss_bc_crack(self, params, batch):
+    def loss_bc_top_ux(self, params, batch, *args, **kwargs):
+        x, t = batch
+        _, disp = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
+        top = jnp.mean(disp[:, 1 - self.cfg.LOAD_ON] ** 2)
+        return top, {}
+
+    def loss_bc_crack(self, params, batch, *args, **kwargs):
         x, t = batch
         phi = vmap(
             lambda x, t: self.net_u(params, x, t)[0],
@@ -140,9 +134,9 @@ class FracturePINN(PINN):
         ref = vmap(self.ref_sol_bc_crack, in_axes=(0, 0))(x, t)
         crack = jnp.mean((phi - ref) ** 2)
 
-        return crack
+        return crack, {}
 
-    def loss_bc_right(self, params, batch):
+    def loss_bc_right(self, params, batch, *args, **kwargs):
         x, t = batch
         nabla_phi_fn = jax.jacrev(
             lambda params, x, t: self.net_u(params, x, t)[0], argnums=1
@@ -150,9 +144,9 @@ class FracturePINN(PINN):
         dphi_dx = vmap(
             lambda params, x, t: nabla_phi_fn(params, x, t)[0, 0], in_axes=(None, 0, 0)
         )(params, x, t)
-        return jnp.mean(dphi_dx**2)
+        return jnp.mean(dphi_dx**2), {}
 
-    def loss_bc_sigmax(self, params, batch):
+    def loss_bc_sigmax(self, params, batch, *args, **kwargs):
         x, t = batch
         phi = vmap(
             lambda params, x, t: self.net_u(params, x, t)[0], in_axes=(None, 0, 0)
@@ -161,7 +155,7 @@ class FracturePINN(PINN):
             lambda params, x, t: self.sigma(params, x, t)[0, 0], in_axes=(None, 0, 0)
         )(params, x, t)
         res = (1 - phi) ** 2 * sigmax
-        return jnp.mean(res**2)
+        return jnp.mean(res**2), {}
 
 
 causal_first_point = 0.3
@@ -174,7 +168,21 @@ causal_weightor = CausalWeightor(
     cfg.CAUSAL_CONFIGS["chunks"],
     t_range=cfg.DOMAIN[-1],
 )
-pinn = FracturePINN(config=cfg, causal_weightor=causal_weightor)
+
+loss_terms = [
+    "pde",
+    "ic_phi",
+    "ic_ux",
+    "ic_uy",
+    "bc_bottom_ux",
+    "bc_bottom_uy",
+    # "bc_top_ux",
+    "bc_top_uy",
+    "bc_crack",
+    "irr",
+]
+
+pinn = FracturePINN(config=cfg, causal_weightor=causal_weightor, loss_terms=loss_terms)
 
 init_key = random.PRNGKey(0)
 model_key, sampler_key = random.split(init_key)
@@ -216,6 +224,7 @@ sampler = FractureSampler(
 stagger = StaggerSwitch(
     pde_names=["stress_x", "stress_y", "pf"], stagger_period=cfg.STAGGER_PERIOD
 )
+
 
 start_time = time.time()
 for epoch in range(cfg.EPOCHS):
@@ -282,27 +291,14 @@ for epoch in range(cfg.EPOCHS):
 
         print(f"Epoch: {epoch}, " f"Loss_{pde_name}: {loss_components[0]:.2e}, ")
 
+        # replace `pde` with `pde_name` in `loss_terms`
+        loss_terms_epoch = loss_terms.copy()
+        loss_terms_epoch[0] = pde_name
         metrics_tracker.register_scalars(
             epoch,
-            names=[
-                "loss/weighted",
-                f"loss/{pde_name}",
-                "loss/ic_phi",
-                "loss/ic_u",
-                "loss/bc_bottom_u",
-                "loss/bc_top_u",
-                "loss/bc_crack",
-                # "loss/bc_right",
-                "loss/irr",
-                f"weight/{pde_name}",
-                "weight/ic_phi",
-                "weight/ic_u",
-                "weight/bc_bottom_u",
-                "weight/bc_top_u",
-                "weight/bc_crack",
-                # "weight/bc_right",
-                "weight/irr",
-            ],
+            names=["loss/weighted"]
+            + [f"loss/{term}" for term in loss_terms_epoch]
+            + [f"weight/{term}" for term in loss_terms_epoch],
             values=[
                 weighted_loss,
                 *loss_components,

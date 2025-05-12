@@ -4,7 +4,7 @@ from jax import numpy as jnp
 class Config:
     EPOCHS = 100000
     N_SAMPLES = 15
-    ADAPTIVE_SAMPLES = 100
+    ADAPTIVE_SAMPLES = 500
     ADAPTIVE_BASE_RATE = 10
     LR = 5e-4
     DECAY = 0.9
@@ -19,7 +19,7 @@ class Config:
     LOG_DIR = "/root/autodl-tmp/tf-logs"
     PREFIX = "fracture/irr"
     RESUME = None
-    # RESUME = "/root/autodl-tmp/tf-logs/fracture/irr/withrar-epoch30000/model-30000/"
+    # RESUME = "/root/autodl-tmp/tf-logs/fracture/irr/2025-05-10-15-33-08/model-30000/"
     # TS = [0.0000, 0.3000, 0.7000, 0.7400, 0.7800]
     TS = [0.0000, 0.2500, 0.5000, 0.8000, 1.0000]
 
@@ -35,6 +35,7 @@ class Config:
     FOURIER_EMB = False
     CAUSAL_WEIGHT = True
     IRR = True
+    POINT_WISE_WEIGHT = True
 
     GC = 2.7
     L = 0.024
@@ -49,25 +50,24 @@ class Config:
     Tc = 1.0
     DISP_PRE_SCALE = 1e2
     STRESS_PRE_SCALE = 1e4
-    PF_PRE_SCALE = 1e2
+    PF_PRE_SCALE = 5e2
 
     CAUSAL_CONFIGS = {
-        "stress_x_eps": 1e-1,
-        "stress_y_eps": 1e-1,
-        "stress_eps": 1e-1,
-        "pf_eps": 1e-1,
-        "step_size": 5,
+        "stress_x_eps": 10,
+        "stress_y_eps": 10,
+        "stress_eps": 10,
+        "pf_eps": 10,
+        "step_size": 10,
         "max_last_weight": 0.99,
         "min_mean_weight": 0.5,
-        "max_eps": 50,
+        "max_eps": 100,
         "chunks": 12,
     }
 
     @classmethod
-    def loading(cls, t, alpha=5.0):
+    def loading(cls, t, alpha=2.0):
         # return cls.UR * t
         return cls.UR / jnp.tanh(alpha) * jnp.tanh(alpha * t)
-
 
 # if __name__ == "__main__":
 #     for key, value in Config.__dict__.items():self.adaptive_kw["num"]

@@ -158,8 +158,8 @@ class FractureSampler(Sampler):
         # the last pde: irreversible
         return [
             pde,
-            ic, ic,
-            bc["bottom"],
+            ic, ic, ic,  # ic for phi, ux, uy
+            bc["bottom"], bc["bottom"], # bottom for ux, uy
             bc["top"],
             bc["crack"],
             # bc["right"],

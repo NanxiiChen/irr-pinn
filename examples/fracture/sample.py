@@ -50,7 +50,8 @@ class FractureSampler(Sampler):
 
         return data[:, :-1], data[:, -1:]
 
-    def sample_pde_rar(self, fns, params, *args, **kwargs):
+    def sample_pde_rar(self, fns, params, only_rar=False,
+                       *args, **kwargs):
         key, self.key = random.split(self.key)
         grid_key, lhs_key = random.split(key)
         common_points = jnp.concatenate(self.sample_pde(), axis=-1)
@@ -95,8 +96,12 @@ class FractureSampler(Sampler):
                 idx * self.adaptive_kw["num"] : (idx + 1) * self.adaptive_kw["num"], :
             ].set(selected_points)
 
+        if only_rar:
+            return rar_points[:, :-1], rar_points[:, -1:]
+
         data = jnp.concatenate([common_points, rar_points], axis=0)
         return data[:, :-1], data[:, -1:]
+    
 
     def sample_ic(self):
         key, self.key = random.split(self.key)
@@ -179,10 +184,10 @@ class FractureSampler(Sampler):
         # the last pde: irreversible
         return [
             pde,
-            ic, ic, ic, # ic for phi, ux, uy
-            bc["bottom"], bc["bottom"], bc["bottom"], # bottom for phi, ux, uy
-            bc["top"], bc["top"],
+            ic, ic, ic,  # ic for phi, ux, uy
+            bc["bottom"], bc["bottom"], bc["bottom"],  # bottom for phi, ux, uy
+            bc["top"], bc["top"], bc["top"], 
             bc["crack"],
-            # bc["vertical"],
+            bc["vertical"],
             pde,
         ]

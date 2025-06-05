@@ -1,5 +1,5 @@
 from itertools import chain
-from typing import List, NamedTuple, Optional, Union
+from typing import List, NamedTuple, Optional, Union, Any
 
 import jax
 import jax.numpy as jnp
@@ -346,3 +346,92 @@ def init_conditioner(p: Array, max_precond_dim: int) -> List[Union[Array, None]]
         return [jnp.zeros((p.shape[0], p.shape[0]))]
 
     return [jnp.zeros((s, s)) if s <= max_precond_dim else None for s in p.shape]
+
+
+
+
+class RPROPState(NamedTuple):
+    """RPROP优化器的状态"""
+    step_sizes: Any  # 每个参数的当前步长
+    prev_grads: Any  # 前一步的梯度
+    step: int  # 当前训练步数
+
+
+def rprop(
+    init_step_size: float = 1e-3,
+    eta_plus: float = 1.2,
+    eta_minus: float = 0.5,
+    step_size_min: float = 1e-6,
+    step_size_max: float = 50.0,
+) -> optax.GradientTransformation:
+    """RPROP (Resilient Backpropagation) 优化器。"""
+    
+    def init_fn(params):
+        step_sizes = jax.tree_map(lambda p: jnp.ones_like(p) * init_step_size, params)
+        prev_grads = jax.tree_map(jnp.zeros_like, params)
+        return RPROPState(step_sizes=step_sizes, prev_grads=prev_grads, step=0)
+    
+    def first_step(args):
+        grads, state = args
+        # 仅使用符号更新，步长保持不变
+        updates = jax.tree_map(
+            lambda g, s: -jnp.sign(g) * s,
+            grads, state.step_sizes
+        )
+        return updates, state.step_sizes
+    
+    def later_steps(args):
+        grads, state = args
+        # 计算梯度符号乘积
+        sign_products = jax.tree_map(
+            lambda g, pg: g * pg,
+            grads, state.prev_grads
+        )
+        
+        # 更新步长
+        new_step_sizes = jax.tree_map(
+            lambda sp, s: jnp.where(
+                sp > 0,  # 符号相同，增加步长
+                jnp.minimum(s * eta_plus, step_size_max),
+                jnp.where(
+                    sp < 0,  # 符号相反，减少步长
+                    jnp.maximum(s * eta_minus, step_size_min),
+                    s  # 梯度为零，保持步长不变
+                )
+            ),
+            sign_products, state.step_sizes
+        )
+        
+        # 当符号改变时，梯度置为0（防止振荡）
+        effective_grads = jax.tree_map(
+            lambda g, sp: jnp.where(sp < 0, 0.0, g),
+            grads, sign_products
+        )
+        
+        # 计算更新
+        updates = jax.tree_map(
+            lambda g, s: -jnp.sign(g) * s,
+            effective_grads, new_step_sizes
+        )
+        
+        return updates, new_step_sizes
+    
+    def update_fn(grads, state, params=None):
+        # 使用jax.lax.cond代替if/else
+        updates, new_step_sizes = jax.lax.cond(
+            state.step == 0,
+            first_step,
+            later_steps,
+            (grads, state)
+        )
+        
+        # 更新状态
+        new_state = RPROPState(
+            step_sizes=new_step_sizes,
+            prev_grads=grads,
+            step=state.step + 1
+        )
+        
+        return updates, new_state
+    
+    return optax.GradientTransformation(init_fn, update_fn)

@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import optax
 from flax.training import train_state
 from jax import jit
-from .soap import soap
+from .optimizer import soap, rprop
 
 
 def create_train_state(model, rng, lr, **kwargs):
@@ -25,8 +25,23 @@ def create_train_state(model, rng, lr, **kwargs):
             b2=0.999,
             precondition_frequency=2,
         )
+    elif opt_method == "rprop":
+        # RPROP不使用学习率调度器，而是自适应调整步长
+        init_step_size = kwargs.get("init_step_size", lr)  # 可以使用传入的学习率作为初始步长
+        eta_plus = kwargs.get("eta_plus", 1.2)
+        eta_minus = kwargs.get("eta_minus", 0.5)
+        step_size_min = kwargs.get("step_size_min", 1e-6)
+        step_size_max = kwargs.get("step_size_max", 50.0)
+        
+        optimizer = rprop(
+            init_step_size=init_step_size,
+            eta_plus=eta_plus,
+            eta_minus=eta_minus,
+            step_size_min=step_size_min,
+            step_size_max=step_size_max
+        )
     else:
-        raise ValueError(f"Unsurpported optimizer: {opt_method}")
+        raise ValueError(f"Unsupported optimizer: {opt_method}")
 
     return train_state.TrainState.create(
         apply_fn=model.apply,

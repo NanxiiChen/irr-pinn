@@ -24,17 +24,14 @@ class CausalWeightor:
         self, loss_chunks: jnp.array, eps: jnp.array
     ):
         cumulative_loss = jnp.cumsum(loss_chunks[:-1])
-
         weights = jnp.concatenate([jnp.array([1.0]), jnp.exp(-eps * cumulative_loss)])
-
         return jax.lax.stop_gradient(weights)
 
     @partial(jax.jit, static_argnums=(0,))
     def compute_causal_loss(
         self,
         residuals: jnp.array,
-        t: jnp.array,
-        phi: jnp.array,
+        datas: list[jnp.array],
         eps: jnp.array,
     ):
         
@@ -59,41 +56,54 @@ class CausalWeightor:
             residual_weights = causal_weights[indices]
 
             return residual_weights, causal_weights, loss_chunks
+        
+        vmapped_compute = jax.vmap(
+            lambda data: compute_causal_weight_single(residuals, data, eps),
+            in_axes=(0,),
+        )(datas)
+        residual_weights, causal_weights, loss_chunks = vmapped_compute
+        causal_loss = jnp.dot(residuals**2, jnp.prod(residual_weights, axis=0))
 
-        residual_weights_t, causal_weights_t, loss_chunks_t = compute_causal_weight_single(
-            residuals, t, eps
-        )
-        residual_weights_phi, causal_weights_phi, loss_chunks_phi = compute_causal_weight_single(
-            residuals, phi, eps
-        )
-        # causal_loss = jnp.dot(loss_chunks, causal_weights)
-        causal_loss = jnp.dot(residuals**2, residual_weights_phi*residual_weights_t)
         return causal_loss, {
-            "causal_weights": causal_weights_phi*causal_weights_t,
-            "loss_chunks": loss_chunks_phi / 2 + loss_chunks_t / 2,
+            "causal_weights": causal_weights,
+            "loss_chunks": loss_chunks,
         }
+
 
     def plot_causal_info(self, causal_weights, loss_chunks, eps):
 
+        
+        if causal_weights.shape[0] == loss_chunks.shape[0]:
+            num_axis = causal_weights.shape[0]
+        else:
+            raise ValueError(
+                "Causal weights and loss chunks must have the same number of elements."
+            )
+        if causal_weights.ndim == 1:
+            causal_weights = causal_weights.reshape(-1, 1)
+            loss_chunks = loss_chunks.reshape(-1, 1)
+
         bins = (self.bins[1:] + self.bins[:-1]) / 2
 
-        fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+        fig, axes = plt.subplots(num_axis, 2, figsize=(10, 5*num_axis))
 
-        ax = axes[0]
-        ax.plot(bins, causal_weights, marker="o")
-        ax.set(
-            xlabel="Time chunks",
-            ylabel="Causal weights",
-        )
+        for i in range(num_axis):
 
-        ax = axes[1]
-        ax.plot(bins, loss_chunks, marker="o")
-        ax.set(
-            xlabel="Time chunks",
-            ylabel="Causal loss",
-        )
+            ax = axes[i, 0]
+            ax.plot(bins, causal_weights[i], marker="o")
+            ax.set(
+                xlabel="Chunks",
+                ylabel=f"Weights for axis {i}",
+            )
 
-        fig.suptitle(f"EPS: {eps:.2e}")
+            ax = axes[i, 1]
+            ax.plot(bins, loss_chunks[i], marker="o")
+            ax.set(
+                xlabel="Chunks",
+                ylabel=f"Loss for axis {i}",
+            )
+
+            fig.suptitle(f"EPS: {eps:.2e}")
 
         return fig
 
@@ -104,6 +114,10 @@ class CausalWeightor:
         causal_configs,
     ):
         new_eps = eps
+        causal_weight = jnp.prod(causal_weight, axis=0)
+        if not causal_weight.ndim == 1:
+            raise ValueError("causal_configs must be a 1D array.")
+
         if (
             causal_weight[-1] > causal_configs["max_last_weight"]
             and eps < causal_configs["max_eps"]

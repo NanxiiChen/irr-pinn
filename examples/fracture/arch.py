@@ -189,6 +189,8 @@ class ModifiedMLP(nn.Module):
             x_emb = FourierEmbedding(self.emb_scale[0], self.emb_dim)(x)
             # x_emb = RBFEmbedding()(x)
             x = jnp.concatenate([x_emb, t_emb], axis=-1)
+            # x = jnp.concatenate([x, t], axis=-1)
+            # x = FourierEmbedding(self.emb_scale[0], self.emb_dim)(x)
         else:
             x = jnp.concatenate([x, t], axis=-1)
 

@@ -157,6 +157,14 @@ class FracturePINN(PINN):
         traction_vectors = jnp.einsum('ijk,k->ij', sigma, norm_vector)
         res = traction_vectors[:, 0] * (1 - phi)**2
         return jnp.mean(res**2), {}
+
+    def loss_pf_energy(self, params, batch, *args, **kwargs):
+        x, t = batch
+        energy_fn = self.net_pf_energy
+        pf_energy = vmap(
+            lambda params, x, t: energy_fn(params, x, t), in_axes=(None, 0, 0)
+        )(params, x, t)
+        return jnp.mean(pf_energy**2), {}
     
 
 
@@ -185,10 +193,10 @@ loss_terms = [
     "bc_bottom_ux",
     "bc_bottom_uy",
     "bc_top_phi",
-    # "bc_top_ux",
+    "bc_top_ux",
     "bc_top_uy",
     "bc_crack",
-    # "bc_sigmax",
+    "bc_sigmax",
     "irr",
 ]
 
@@ -259,9 +267,10 @@ for epoch in range(cfg.EPOCHS):
     if epoch % cfg.STAGGER_PERIOD == 0:
         batch = sampler.sample(
             fns=[getattr(pinn, f"net_{pde_name}")],
-            # fns=[pinn.psi],
+            # fns=[pinn.psi_pos],
             params=state.params,
-            rar=pinn.cfg.RAR,
+            rar=pinn.cfg.RAR
+            # rar=pinn.cfg.RAR if pde_name == "pf" else False,
             # net_u=pinn.net_u,
         )
 
@@ -284,7 +293,7 @@ for epoch in range(cfg.EPOCHS):
     if epoch % cfg.STAGGER_PERIOD == 0:
 
         # save the model
-        if epoch % (10 * cfg.STAGGER_PERIOD) == 0:
+        if epoch % (40 * cfg.STAGGER_PERIOD) == 0:
             ckpt.save(log_path + f"/model-{epoch}", state)
 
             fig, error = evaluate2D(
@@ -319,7 +328,7 @@ for epoch in range(cfg.EPOCHS):
             ],
         )
 
-        if cfg.CAUSAL_WEIGHT and epoch % (10 * cfg.STAGGER_PERIOD) == 0:
+        if cfg.CAUSAL_WEIGHT and epoch % (40 * cfg.STAGGER_PERIOD) == 0:
             fig = pinn.causal_weightor.plot_causal_info(
                 aux_vars["causal_weights"],
                 aux_vars["loss_chunks"],

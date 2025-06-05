@@ -72,11 +72,18 @@ class PINN(nn.Module):
         phi, disp = jnp.split(sol, [1], axis=-1)
         scale_factor = jnp.array([1.0, 1.0]) * self.cfg.DISP_PRE_SCALE
         disp = disp / scale_factor
-        phi = jnp.tanh(phi) / 2 + 0.5
+        # phi = jnp.tanh(phi) / 2 + 0.5
         # phi = self.scale_phi(phi)
-        # phi = jnp.exp(-phi**2)
+        phi = jnp.exp(-phi**2)
         # phi = jnp.exp(-jnp.abs(phi)*10)
         # phi = jnp.exp(-jax.nn.sigmoid(-phi*10)*10)
+
+        # apply hard constraint on displacement
+        # y0, y1 = self.cfg.DOMAIN[1]
+        # ux, uy = jnp.split(disp, 2, axis=-1)
+        # ux = (x[1]-y0)*(x[1]- y1)*ux * t
+        # uy = (x[1]-y0)*(x[1]- y1)*uy* t + (x[1]-y0)*(y1-y0)*self.cfg.loading(t)
+        # disp = jnp.concatenate((ux, uy), axis=-1)
         return phi, disp
 
     @partial(jit, static_argnums=(0,))
@@ -157,27 +164,26 @@ class PINN(nn.Module):
 
         return pf / self.cfg.PF_PRE_SCALE
 
-    # @partial(jit, static_argnums=(0,))
-    # def net_pf(self, params, x, t):
-    #     # use energy type formulation
-    #     # $$(1-\phi)^2 \psi(\varepsilon) + G_c ( \frac{1}{2l}\phi^2 + \frac{l}{2} |\nabla\phi|^2 )$$
-    #     phi, disp = self.net_u(params, x, t)
-    #     phi = phi.squeeze(-1)
+    @partial(jit, static_argnums=(0,))
+    def net_pf_energy(self, params, x, t):
+        # use energy type formulation
+        # $$(1-\phi)^2 \psi(\varepsilon) + G_c ( \frac{1}{2l}\phi^2 + \frac{l}{2} |\nabla\phi|^2 )$$
+        phi, disp = self.net_u(params, x, t)
+        phi = phi.squeeze(-1)
 
-    #     nabla_phi = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0], argnums=0)(
-    #         x, t
-    #     )[0]
-    #     pf = (
-    #         (1 - phi) ** 2 * self.psi_pos(params, x, t)
-    #         + self.psi_neg(params, x, t)
-    #         + self.cfg.GC
-    #         * (
-    #             phi**2 / (2 * self.cfg.L)
-    #             + (self.cfg.L / 2) * jnp.sum(nabla_phi**2, axis=-1)
-    #         )
-    #     )
-
-    #     return pf / self.cfg.PF_PRE_SCALE
+        nabla_phi = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0], argnums=0)(
+            x, t
+        )[0]
+        pf = (
+            (1 - phi) ** 2 * self.psi_pos(params, x, t)
+            + self.psi_neg(params, x, t)
+            + self.cfg.GC
+            * (
+                phi**2 / (2 * self.cfg.L)
+                + (self.cfg.L / 2) * jnp.sum(nabla_phi**2, axis=-1)
+            )
+        )
+        return pf / self.cfg.PF_PRE_SCALE
 
     def net_speed(self, params, x, t):
         # jac_dt = jax.jacrev(self.net_u, argnums=2)
@@ -196,18 +202,6 @@ class PINN(nn.Module):
     @partial(jit, static_argnums=(0, 4))
     def loss_pde(self, params, batch, eps, pde_name: str):
         x, t = batch
-
-        # if pde_name == "stress":
-        #     residual = vmap(self.net_stress, in_axes=(None, 0, 0))(params, x, t)
-        #     mse_res = jnp.mean(residual**2, axis=0)
-        #     weights = jax.lax.stop_gradient(
-        #         jnp.sqrt(jnp.sum(mse_res, axis=-1) / (mse_res + 1e-6))
-        #     )
-        #     residual = jnp.sum(jnp.abs(residual) * weights, axis=-1)
-        # elif pde_name == "pf":
-        #     residual = vmap(self.net_pf, in_axes=(None, 0, 0))(params, x, t)
-        # else:
-        #     raise ValueError(f"Unknown PDE name: {pde_name}")
 
         fn = getattr(self, f"net_{pde_name}")
         residual = vmap(fn, in_axes=(None, 0, 0))(params, x, t)
@@ -242,8 +236,11 @@ class PINN(nn.Module):
             phi = jax.lax.stop_gradient(phi)
             # phi = -jnp.log(phi + 1e-10)
             # phi = 1 - (phi - jnp.min(phi)) / (jnp.max(phi) - jnp.min(phi))
+            causal_data = jnp.stack((t.reshape(-1), phi.reshape(-1)), axis=0)
             loss, aux_vars = self.causal_weightor.compute_causal_loss(
-                residual, t, phi, eps
+                residual, 
+                causal_data,
+                eps
             )
             aux_vars.update({"weights": weights})
             return loss, aux_vars
@@ -277,15 +274,7 @@ class PINN(nn.Module):
         for idx, (loss_item_fn, batch_item) in enumerate(
             zip(self.loss_fn_panel, batch)
         ):
-            # if idx == 0:
-            #     (loss_item, aux), grad_item = jax.value_and_grad(
-            #         loss_item_fn, has_aux=True
-            #     )(params, batch_item, eps, pde_name)
-            #     aux_vars.update(aux)
-            # else:
-            #     (loss_item, aux), grad_item = jax.value_and_grad(loss_item_fn)(
-            #         params, batch_item
-            #     )
+
             (loss_item, aux), grad_item = jax.value_and_grad(
                 loss_item_fn, has_aux=True
             )(params, batch_item, eps, pde_name)

@@ -75,6 +75,7 @@ class FractureSampler(Sampler):
                     jnp.sqrt(jnp.sum(mse_res, axis=-1) / (mse_res + 1e-6))
                 )
                 res = jnp.sum(jnp.abs(res) * weights[None, :], axis=-1)
+
             # res = res.reshape(self.adaptive_kw["num"] * self.adaptive_kw["ratio"], -1)
             # res = jnp.linalg.norm(res, ord=1, axis=-1)
 
@@ -90,6 +91,30 @@ class FractureSampler(Sampler):
             # weights = jax.lax.stop_gradient(jnp.exp(-grad_phi))
             # res = weights * res
 
+            # if fn.__name__.endswith("pf"):
+            #     # pf > 0 is valid, do not need to penalize
+            #     res = jnp.where(res > 0, 0.0, res)
+
+            if fn.__name__.endswith("speed"):
+                # speed > 0 is valid, do not need to penalize
+                res = jnp.where(res > 0, 0.0, res)
+
+            if fn.__name__.endswith("psi"):
+                model = kwargs.get("model", None)
+                if model is not None:
+                    phi, _ = model.net_u(params, x, t)
+                    # flatten phi to 1D
+                    phi = phi.squeeze(axis=-1)
+                    # let weight be zero when phi is 1
+                    # means this point is already completely cracked
+                    weights = jax.lax.stop_gradient(
+                        jnp.where(jnp.abs(phi - 1) < 1e-3, 0.0, 1.0)
+                    )
+                    res = weights * res
+                else:
+                    raise ValueError("model is required for psi function")
+
+            
             _, indices = jax.lax.top_k(jnp.abs(res), self.adaptive_kw["num"])
             selected_points = adaptive_base[indices]
             rar_points = rar_points.at[
@@ -98,6 +123,7 @@ class FractureSampler(Sampler):
 
         if only_rar:
             return rar_points[:, :-1], rar_points[:, -1:]
+            
 
         data = jnp.concatenate([common_points, rar_points], axis=0)
         return data[:, :-1], data[:, -1:]
@@ -148,11 +174,11 @@ class FractureSampler(Sampler):
             [jnp.ones_like(yt[:, 0:1]) * self.domain[0][1], yt[:, 0:1], yt[:, 1:2]],
             axis=1,
         )
-        left = jnp.concatenate(
-            [jnp.ones_like(yt[:, 0:1]) * self.domain[0][0], yt[:, 0:1], yt[:, 1:2]],
-            axis=1,
-        )
-        vertical = jnp.concatenate([right,left], axis=0)
+        # left = jnp.concatenate(
+        #     [jnp.ones_like(yt[:, 0:1]) * self.domain[0][0], yt[:, 0:1], yt[:, 1:2]],
+        #     axis=1,
+        # )
+        vertical = jnp.concatenate([right,], axis=0)
 
 
         crack = lhs_sampling(
@@ -186,8 +212,8 @@ class FractureSampler(Sampler):
         return [
             pde,
             ic,ic,ic,
-            bc["bottom"],bc["bottom"],
-            bc["top"],bc["top"],
+            bc["bottom"],bc["bottom"],bc["bottom"],
+            bc["top"],bc["top"],bc["top"],
             bc["crack"],
             bc["vertical"],
             pde, 

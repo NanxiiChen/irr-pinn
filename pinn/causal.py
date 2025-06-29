@@ -62,7 +62,8 @@ class CausalWeightor:
             in_axes=(0,),
         )(datas)
         residual_weights, causal_weights, loss_chunks = vmapped_compute
-        causal_loss = jnp.dot(residuals**2, jnp.prod(residual_weights, axis=0))
+        # causal_loss = jnp.dot(residuals**2, jnp.prod(residual_weights, axis=0))
+        causal_loss = jnp.mean(residuals**2 * jnp.prod(residual_weights, axis=0))
 
         return causal_loss, {
             "causal_weights": causal_weights,

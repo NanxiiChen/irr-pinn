@@ -155,7 +155,7 @@ class FracturePINN(PINN):
             self.sigma, in_axes=(None, 0, 0)
         )(params, x, t)
         traction_vectors = jnp.einsum('ijk,k->ij', sigma, norm_vector) # shape [batch, 2]
-        # res = traction_vectors[:, 0] * (1 - phi)**2  # traction in x direction
+        # res = traction_vectors * (1 - phi)**2  # traction in x direction
         phi = jnp.expand_dims(phi, axis=-1)  # shape [batch, 1]
         res = traction_vectors * (1 - phi)**2
         return jnp.mean(res**2), {}
@@ -195,14 +195,15 @@ loss_terms = [
     "ic_uy",
     "bc_bottom_phi",
     "bc_bottom_ux",
-    # "bc_bottom_uy",
+    "bc_bottom_uy",
     "bc_top_phi",
     "bc_top_ux",
-    # "bc_top_uy",
+    "bc_top_uy",
     "bc_crack",
     "bc_sigmax",
     "irr",
     # "complementarity"
+    # "irr_pf",
 ]
 
 pinn = FracturePINN(config=cfg, causal_weightor=causal_weightor, loss_terms=loss_terms)
@@ -246,7 +247,7 @@ sampler = FractureSampler(
 )
 
 stagger = StaggerSwitch(
-    pde_names=["stress", "pf"], 
+    pde_names=["stress_y", "stress_x", "pf"], 
     stagger_period=cfg.STAGGER_PERIOD
 )
 
@@ -273,13 +274,11 @@ for epoch in range(cfg.EPOCHS):
     # if epoch % cfg.STAGGER_PERIOD == 0:
     if epoch % 10 == 0:
         batch = sampler.sample(
-            # fns=[pinn.net_pf, pinn.net_stress_x, pinn.net_stress_y],
-            # fns=[pinn.net_speed],
-            fns=[getattr(pinn, f"net_{pde_name}")],
+            fns=[pinn.psi],
+            # fns=[getattr(pinn, f"net_{pde_name}"),],
             params=state.params,
-            rar=pinn.cfg.RAR
-            # rar=pinn.cfg.RAR if pde_name == "pf" else False,
-            # net_u=pinn.net_u,
+            rar=pinn.cfg.RAR,
+            model=pinn
         )
 
     state, (weighted_loss, loss_components, weight_components, aux_vars) = train_step(

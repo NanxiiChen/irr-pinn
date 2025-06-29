@@ -99,20 +99,20 @@ class FractureSampler(Sampler):
                 # speed > 0 is valid, do not need to penalize
                 res = jnp.where(res > 0, 0.0, res)
 
-            if fn.__name__.endswith("psi"):
-                model = kwargs.get("model", None)
-                if model is not None:
-                    phi, _ = model.net_u(params, x, t)
-                    # flatten phi to 1D
-                    phi = phi.squeeze(axis=-1)
-                    # let weight be zero when phi is 1
-                    # means this point is already completely cracked
-                    weights = jax.lax.stop_gradient(
-                        jnp.where(jnp.abs(phi - 1) < 1e-3, 0.0, 1.0)
-                    )
-                    res = weights * res
-                else:
-                    raise ValueError("model is required for psi function")
+            # if fn.__name__.endswith("pf"):
+            model = kwargs.get("model", None)
+            if model is not None:
+                phi, _ = model.net_u(params, x, t)
+                # flatten phi to 1D
+                phi = phi.squeeze(axis=-1)
+                # let weight be zero when phi is 1
+                # means this point is already completely cracked
+                weights = jax.lax.stop_gradient(
+                    jnp.where(jnp.abs(phi - 1) < 1e-3, 0.0, 1.0)
+                )
+                res = weights * res
+            else:
+                raise ValueError("model is required for psi function")
 
             
             _, indices = jax.lax.top_k(jnp.abs(res), self.adaptive_kw["num"])
@@ -174,11 +174,11 @@ class FractureSampler(Sampler):
             [jnp.ones_like(yt[:, 0:1]) * self.domain[0][1], yt[:, 0:1], yt[:, 1:2]],
             axis=1,
         )
-        # left = jnp.concatenate(
-        #     [jnp.ones_like(yt[:, 0:1]) * self.domain[0][0], yt[:, 0:1], yt[:, 1:2]],
-        #     axis=1,
-        # )
-        vertical = jnp.concatenate([right,], axis=0)
+        left = jnp.concatenate(
+            [jnp.ones_like(yt[:, 0:1]) * self.domain[0][0], yt[:, 0:1], yt[:, 1:2]],
+            axis=1,
+        )
+        vertical = jnp.concatenate([right,left], axis=0)
 
 
         crack = lhs_sampling(

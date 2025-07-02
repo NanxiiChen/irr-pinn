@@ -171,7 +171,7 @@ class PINN(nn.Module):
 
 
     def net_stress_x(self, params, x, t):
-        return self.net_stress(params, x, t)[0]
+        return self.net_stress(params, x, t)[0] * 10
 
     def net_stress_y(self, params, x, t):
         return self.net_stress(params, x, t)[1]

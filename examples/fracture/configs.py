@@ -8,7 +8,7 @@ class Config:
     ADAPTIVE_BASE_RATE = 6
     LR = 5e-4
     DECAY = 0.9
-    DECAY_EVERY = 2000
+    DECAY_EVERY = 1000
     STAGGER_PERIOD = 25
     EMB_SCALE = (1.0, 1.0)  # emb sacle for (x, t)
     EMB_DIM = 128
@@ -32,7 +32,7 @@ class Config:
     OPTIMIZER = "adam"
     CHANGE_OPT_AT = 100000
     FOURIER_EMB = False
-    CAUSAL_WEIGHT = False
+    CAUSAL_WEIGHT = True
     IRR = True
     POINT_WISE_WEIGHT = False   # 有两种形式，1/(alpha + grad(phi)) 或者 exp(-grad(phi)*alpha)
     RAR = True   # RAR 和PWW实际上是相反作用，RAR强调界面，PWW弱化界面
@@ -68,7 +68,7 @@ class Config:
     }
 
     @classmethod
-    def loading(cls, t, alpha=3.0):
+    def loading(cls, t, alpha=4.0):
         # return cls.UR * t
         return cls.UR / jnp.tanh(alpha) * jnp.tanh(alpha * t)
 

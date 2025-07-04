@@ -303,8 +303,8 @@ class PINN(nn.Module):
             # loss, aux_vars = self.causal_weightor.compute_causal_loss(residual, t, eps)
             phi, _ = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
             phi = jax.lax.stop_gradient(phi)
-            # causal_data = jnp.stack((t.reshape(-1), phi.reshape(-1),), axis=0)
-            causal_data = jnp.stack((t.reshape(-1),), axis=0)
+            causal_data = jnp.stack((t.reshape(-1), phi.reshape(-1),), axis=0)
+            # causal_data = jnp.stack((t.reshape(-1),), axis=0)
             loss, aux_vars = self.causal_weightor.compute_causal_loss(
                 residual, 
                 causal_data,

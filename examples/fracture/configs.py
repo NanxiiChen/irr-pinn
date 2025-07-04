@@ -61,7 +61,7 @@ class Config:
         "pf_eps": 10,
         "energy_eps": 1e-2,
         "step_size": 5,
-        "max_last_weight": 0.99,
+        "max_last_weight": 0.90,
         "min_mean_weight": 0.2,
         "max_eps": 5,
         "chunks": 10,

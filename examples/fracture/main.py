@@ -300,7 +300,7 @@ for epoch in range(cfg.EPOCHS):
     if epoch % cfg.STAGGER_PERIOD == 0:
 
         # save the model
-        if epoch % 500 == 0:
+        if epoch % 200 == 0:
             ckpt.save(log_path + f"/model-{epoch}", state)
 
             fig, error = evaluate2D(
@@ -335,7 +335,7 @@ for epoch in range(cfg.EPOCHS):
             ],
         )
 
-        if cfg.CAUSAL_WEIGHT and epoch % 500 == 0:
+        if cfg.CAUSAL_WEIGHT and epoch % 200 == 0:
             fig = pinn.causal_weightor.plot_causal_info(
                 aux_vars["causal_weights"],
                 aux_vars["loss_chunks"],

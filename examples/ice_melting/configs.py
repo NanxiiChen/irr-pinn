@@ -1,7 +1,3 @@
-"""
-Sharp-PINNs for pitting corrosion with 2d-1pit
-"""
-
 import math
 
 

@@ -20,7 +20,7 @@ class PINN(nn.Module):
         loss_terms = kwargs.get("loss_terms", [])
         self.loss_fn_panel = [getattr(self, f"loss_{term}") for term in loss_terms]
         self.cfg = config
-        arch = {"mlp": MLP, "modified_mlp": ModifiedMLP}
+        arch = {"mlp": MLP, "modified_mlp": ModifiedMLP, "resnet": ResNet}
         self.model = arch[self.cfg.ARCH_NAME](
             act_name=self.cfg.ACT_NAME,
             num_layers=self.cfg.NUM_LAYERS,
@@ -38,7 +38,7 @@ class PINN(nn.Module):
         T = self.model.apply(params, x)
         T_ADIA = self.cfg.T_ADIA
         T_IN = self.cfg.T_IN
-        # return T * self.cfg.T_PRE_SCALE + T_IN
+        # return T * (T_ADIA - T_IN) + T_IN
         return nn.sigmoid(T) * (T_ADIA - T_IN) + T_IN
     
     @partial(jit, static_argnums=(0,))
@@ -158,6 +158,7 @@ class PINN(nn.Module):
         weights = self.grad_norm_weights(grads)
         if not self.cfg.IRR:
             weights = weights.at[-1].set(0.0)
+            weights = weights.at[-2].set(0.0)
 
         return jnp.sum(losses * weights), (losses, weights, aux_vars)
             

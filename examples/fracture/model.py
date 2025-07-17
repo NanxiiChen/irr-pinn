@@ -46,9 +46,9 @@ class PINN(nn.Module):
         )
         self.causal_weightor = causal_weightor
 
-        # self.loss_fn_stress = partial(self.loss_fn, pde_name="stress")
-        self.loss_fn_stress_x = partial(self.loss_fn, pde_name="stress_x")
-        self.loss_fn_stress_y = partial(self.loss_fn, pde_name="stress_y")
+        self.loss_fn_stress = partial(self.loss_fn, pde_name="stress")
+        # self.loss_fn_stress_x = partial(self.loss_fn, pde_name="stress_x")
+        # self.loss_fn_stress_y = partial(self.loss_fn, pde_name="stress_y")
         self.loss_fn_pf = partial(self.loss_fn, pde_name="pf")
         # self.loss_fn_energy = partial(self.loss_fn, pde_name="energy")
 
@@ -71,7 +71,7 @@ class PINN(nn.Module):
     def net_u(self, params, x, t):
         sol = self.model.apply(params, x, t)
         phi, disp = jnp.split(sol, [1], axis=-1)
-        scale_factor = jnp.array([1.0, 1.0]) * self.cfg.DISP_PRE_SCALE
+        scale_factor = jnp.array([1.0, 0.5]) * self.cfg.DISP_PRE_SCALE
         disp = disp / scale_factor
         phi = jnp.tanh(phi) / 2 + 0.5
         # phi = self.scale_phi(phi)
@@ -160,13 +160,14 @@ class PINN(nn.Module):
 
     @partial(jit, static_argnums=(0,))
     def net_stress(self, params, x, t):
-        def phi_cdot_sigma(x, t):
+        def damaged_sigma(x, t):
             phi, _ = self.net_u(params, x, t)
             sigma = self.sigma(params, x, t)
             return (1 - phi) ** 2 * sigma
         
-        jac_phi_sigma = jax.jacrev(phi_cdot_sigma, argnums=0)(x, t)
-        stress = jnp.einsum("ijj->i", jac_phi_sigma)
+        div_damaged_sigma = jax.jacrev(damaged_sigma, argnums=0)(x, t)
+        stress = jnp.einsum("ijj->i", div_damaged_sigma)
+        # stress = jnp.sqrt(jnp.sum(stress**2, axis=-1))
         return stress / self.cfg.STRESS_PRE_SCALE
 
 
@@ -193,7 +194,35 @@ class PINN(nn.Module):
     
     def net_pf(self, params, x, t):
         pf = self._net_pf(params, x, t)
-        # dphi_dt = self.net_speed(params, x, t)
+        dphi_dt = self.net_speed(params, x, t)
+        phi, _ = self.net_u(params, x, t)
+        # weights = 0 when dphi_dt = 0 
+        # weights = 0 when phi -> 1
+        # weights = jax.lax.stop_gradient(
+        #     jnp.where(dphi_dt <= 1e-3, 0.0, 1.0)
+        # ) * jax.lax.stop_gradient(
+        #     jnp.where(jnp.abs(phi-1) < 1e-3, 0.0, 1.0)
+        # )
+        weights = jax.lax.stop_gradient(
+            jnp.where((jnp.abs(dphi_dt) <= 1e-3) | (jnp.abs(phi-1) < 1e-3), 0.0, 1.0)
+        )
+        pf = weights * pf
+
+
+        # # pf > 0 for dphi_dt = 0 and phi < 1, indicates not yet reached critical state
+        # mask_pos_pf = (jnp.abs(dphi_dt) <= 1e-3) & (jnp.abs(phi-1) > 1e-3)
+        # # pf < 0 for phi = 1, indicates already totally fractured
+        # mask_neg_pf = jnp.abs(phi-1) <= 1e-3
+        # # pf = 0 for dphi_dt > 0, indicates just at the critical state, cracking is growing
+        # pf = jnp.where(
+        #     mask_pos_pf,
+        #     jax.nn.relu(-pf),
+        #     jnp.where(
+        #         mask_neg_pf,
+        #         jax.nn.relu(pf),
+        #         pf
+        #     )
+        # )
         return pf
     
     @partial(jit, static_argnums=(0,))
@@ -263,12 +292,14 @@ class PINN(nn.Module):
 
         fn = getattr(self, f"net_{pde_name}")
         residual = vmap(fn, in_axes=(None, 0, 0))(params, x, t)
-        # if pde_name == "stress":
-        #     mse_res = jnp.mean(residual**2, axis=0)
-        #     weights = jax.lax.stop_gradient(
-        #         jnp.sqrt(jnp.sum(mse_res, axis=-1) / (mse_res + 1e-6))
-        #     )
-        #     residual = jnp.sum(jnp.abs(residual) * weights, axis=-1)
+        if pde_name == "stress":
+            mse_res = jnp.mean(residual**2, axis=0)
+            weights = jax.lax.stop_gradient(
+                jnp.sum(mse_res, axis=-1) / (mse_res + 1e-6)
+            )
+            # repeat weights to match the length of residual, [batch_size, 2]
+            weights = weights[None, :]
+            residual = jnp.sqrt(jnp.sum(residual**2 * weights, axis=-1))
 
         # point-wise weight
         if self.cfg.POINT_WISE_WEIGHT:
@@ -322,7 +353,11 @@ class PINN(nn.Module):
     def loss_irr(self, params, batch, *args, **kwargs):
         x, t = batch
         dphi_dt = vmap(self.net_speed, in_axes=(None, 0, 0))(params, x, t)
-        return jnp.mean(nn.relu(-dphi_dt)), {}
+        return jnp.mean(nn.relu(-dphi_dt)), {
+            "x_irr": x,
+            "t_irr": t,
+            "dphi_dt": dphi_dt,
+        }
     
     def loss_irr_pf(self, params, batch, *args, **kwargs):
         x, t = batch

@@ -74,7 +74,8 @@ class FractureSampler(Sampler):
                 weights = jax.lax.stop_gradient(
                     jnp.sqrt(jnp.sum(mse_res, axis=-1) / (mse_res + 1e-6))
                 )
-                res = jnp.sum(jnp.abs(res) * weights[None, :], axis=-1)
+                weights = weights[None, :]
+                res = jnp.sqrt(jnp.sum(res**2 * weights, axis=-1))
 
             # res = res.reshape(self.adaptive_kw["num"] * self.adaptive_kw["ratio"], -1)
             # res = jnp.linalg.norm(res, ord=1, axis=-1)
@@ -211,7 +212,7 @@ class FractureSampler(Sampler):
         # the last pde: irreversible
         return [
             pde,
-            ic,ic,ic,
+            ic,
             bc["bottom"],bc["bottom"],bc["bottom"],
             bc["top"],bc["top"],bc["top"],
             bc["crack"],

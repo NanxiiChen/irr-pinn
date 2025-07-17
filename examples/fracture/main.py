@@ -50,7 +50,8 @@ class FracturePINN(PINN):
         return jax.lax.stop_gradient(phi)
 
     def ref_sol_ic_phi(self, x, t):
-        phi = jnp.exp(-jnp.abs(x[1] / self.cfg.L)) * (1 - jax.nn.sigmoid(x[0] * 200))
+        # phi = jnp.exp(-jnp.abs(x[1] / self.cfg.L)) * (1 - jax.nn.sigmoid(x[0] * 200))
+        phi = jnp.exp(-jnp.abs(x[1] / self.cfg.L)) * jnp.where(x[0] <= 0.0, 1.0, 0.0)
         return jax.lax.stop_gradient(phi)
 
     # def loss_ic(self, params, batch, *args, **kwargs):
@@ -191,8 +192,8 @@ causal_weightor = CausalWeightor(
 loss_terms = [
     "pde",
     "ic_phi",
-    "ic_ux",
-    "ic_uy",
+    # "ic_ux",
+    # "ic_uy",
     "bc_bottom_phi",
     "bc_bottom_ux",
     "bc_bottom_uy",
@@ -247,7 +248,7 @@ sampler = FractureSampler(
 )
 
 stagger = StaggerSwitch(
-    pde_names=["stress_y", "stress_x", "pf"], 
+    pde_names=["stress", "pf"], 
     stagger_period=cfg.STAGGER_PERIOD
 )
 
@@ -277,7 +278,7 @@ for epoch in range(cfg.EPOCHS):
             fns=[pinn.psi_pos],
             # fns=[getattr(pinn, f"net_{pde_name}"),],
             params=state.params,
-            rar=pinn.cfg.RAR,
+            rar=pinn.cfg.RAR if pde_name == "pf" else False,
             model=pinn
         )
 

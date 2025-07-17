@@ -40,7 +40,7 @@ class Config:
 
     GC = 2.7
     L = 0.024
-    UR = 0.0055
+    UR = 0.0054
     LOAD_ON_DIR = "y"
     LOAD_ON = 1 if LOAD_ON_DIR == "y" else 0
     LAMBDA = 121.1538e3
@@ -68,7 +68,7 @@ class Config:
     }
 
     @classmethod
-    def loading(cls, t, alpha=4.0):
+    def loading(cls, t, alpha=3.0):
         # return cls.UR * t
         return cls.UR / jnp.tanh(alpha) * jnp.tanh(alpha * t)
     

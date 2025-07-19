@@ -1,13 +1,13 @@
-# IRR-PINN: Physics-Informed Neural Networks with Irreversibility Constraints
+# IRR-PINNs: Physics-Informed Neural Networks with Irreversibility Constraints
 
 
 ## Overview
 
-This repository implements the IRR-PINN (Irreversibility-constrained Physics-Informed Neural Networks) framework, a novel approach specifically designed to address physics problems involving irreversible processes. 
-
-The key innovation of IRR-PINN lies in the introduction of **irreversibility constraints** as additional regularization terms in the loss function. This constraint mechanism effectively reduces the solution space and guides the neural network toward physically meaningful solutions.
+This repository implements the IRR-PINNs (Irreversibility-constrained Physics-Informed Neural Networks) framework, a novel approach specifically designed to address physics problems involving irreversible processes. By explicitly incorporating **irreversibility constraints** into the loss function, IRR-PINNs guide the neural network to produce solutions that respect the inherent directionality of physical laws, leading to more accurate and stable predictions. 
 
 ### Irreversibility Constraint Formulation
+
+We form the irreversibility constraint as an additional regularization term in the loss function of PINNs, which penalizes violations of the expected directionality of physical processes.
 
 For **forward irreversible processes** (where the physical quantity should only increase):
 ```python
@@ -20,8 +20,9 @@ loss_irr = mean(ReLU(dphi/dt))
 where:
 - `dphi/dt` represents the time derivative of the physical quantity $\phi$
 - `ReLU` activation function ensures that only violations of the irreversibility constraint contribute to the loss
-- The constraint can be generalized to any inequality-based governing equations
-This simple yet powerful formulation significantly improves solution accuracy and stability for irreversible physical processes by enforcing the fundamental directionality constraints inherent in these systems.
+
+
+Furthermore, this constraint can be generalized to any inequality-based governing equations. This simple yet powerful formulation significantly improves solution accuracy and stability for irreversible physical processes by enforcing the fundamental directionality constraints inherent in these systems.
 
 ## Examples
 

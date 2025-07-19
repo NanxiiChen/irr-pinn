@@ -11,11 +11,11 @@ The key innovation of IRR-PINN lies in the introduction of **irreversibility con
 
 For **forward irreversible processes** (where the physical quantity should only increase):
 ```python
-loss_irr = mean(ReLU(dphi/dt))
+loss_irr = mean(ReLU(-dphi/dt))
 ```
 For **backward irreversible processes** (where the physical quantity should only decrease):
 ```python
-loss_irr = mean(ReLU(-dphi/dt))
+loss_irr = mean(ReLU(dphi/dt))
 ```
 where:
 - `dphi/dt` represents the time derivative of the physical quantity $\phi$

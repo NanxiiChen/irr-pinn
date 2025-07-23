@@ -203,26 +203,26 @@ class PINN(nn.Module):
         # ) * jax.lax.stop_gradient(
         #     jnp.where(jnp.abs(phi-1) < 1e-3, 0.0, 1.0)
         # )
-        weights = jax.lax.stop_gradient(
-            jnp.where((jnp.abs(dphi_dt) <= 1e-3) | (jnp.abs(phi-1) < 1e-3), 0.0, 1.0)
-        )
-        pf = weights * pf
+        # weights = jax.lax.stop_gradient(
+        #     jnp.where((jnp.abs(dphi_dt) <= 1e-3) | (jnp.abs(phi-1) < 1e-3), 0.0, 1.0)
+        # )
+        # pf = weights * pf
 
 
         # # pf > 0 for dphi_dt = 0 and phi < 1, indicates not yet reached critical state
-        # mask_pos_pf = (jnp.abs(dphi_dt) <= 1e-3) & (jnp.abs(phi-1) > 1e-3)
+        mask_pos_pf = (jnp.abs(dphi_dt) <= 1e-3) & (jnp.abs(phi-1) > 1e-3)
         # # pf < 0 for phi = 1, indicates already totally fractured
-        # mask_neg_pf = jnp.abs(phi-1) <= 1e-3
+        mask_neg_pf = jnp.abs(phi-1) <= 1e-3
         # # pf = 0 for dphi_dt > 0, indicates just at the critical state, cracking is growing
-        # pf = jnp.where(
-        #     mask_pos_pf,
-        #     jax.nn.relu(-pf),
-        #     jnp.where(
-        #         mask_neg_pf,
-        #         jax.nn.relu(pf),
-        #         pf
-        #     )
-        # )
+        pf = jnp.where(
+            mask_pos_pf,
+            jax.nn.relu(-pf),
+            jnp.where(
+                mask_neg_pf,
+                jax.nn.relu(pf),
+                pf
+            )
+        )
         return pf
     
     @partial(jit, static_argnums=(0,))
@@ -406,6 +406,7 @@ class PINN(nn.Module):
         weights = self.grad_norm_weights(grads)
         if not self.cfg.IRR:
             weights = weights.at[-1].set(0.0)
+        weights = weights.at[-4].set(weights[-4] * 5)
 
         # weights = weights.at[1].set(weights[1] * 5)
 
@@ -420,8 +421,8 @@ class PINN(nn.Module):
         grad_norms = jnp.array([tree_norm(grad) for grad in grads])
 
         grad_norms = jnp.clip(grad_norms, eps, 1 / eps)
-        weights = jnp.mean(grad_norms) / (grad_norms + eps)
-        # weights = 1.0 / (grad_norms + eps)
+        # weights = jnp.mean(grad_norms) / (grad_norms + eps)
+        weights = 1.0 / (grad_norms + eps)
         weights = jnp.nan_to_num(weights)
         weights = jnp.clip(weights, eps, 1 / eps)
 

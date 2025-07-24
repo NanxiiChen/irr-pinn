@@ -177,7 +177,8 @@ class PINN(nn.Module):
         if not self.cfg.CAUSAL_WEIGHT:
             return jnp.mean(residual**2), {}
         else:
-            return self.causal_weightor.compute_causal_loss(residual, t, eps)
+            causal_data = jnp.stack((t.reshape(-1), ), axis=0)
+            return self.causal_weightor.compute_causal_loss(residual, causal_data, eps)
 
     def loss_ic(self, params, batch):
         x, t = batch

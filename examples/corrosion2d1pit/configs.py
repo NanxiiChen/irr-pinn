@@ -1,8 +1,7 @@
 """
 Sharp-PINNs for pitting corrosion with 2d-1pit
 """
-
-
+import math
 class Config:
     EPOCHS = 5000
     N_SAMPLES = 15
@@ -17,8 +16,8 @@ class Config:
 
     DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 1.0]]
     DATA_PATH = "./data/corrosion-2d-1pit/"
-    LOG_DIR = "/root/tf-logs"
-    PREFIX = "corrosion/2d-1pit/irr"
+    LOG_DIR = "/root/autodl-tmp/tf-logs"
+    PREFIX = "corrosion/2d-1pit/irr/thickness-2"
     # TS = [0.000, 3.582, 9.726, 19.966]
     TS = [0.000, 10.750, 19.966, 29.694]
 
@@ -35,6 +34,7 @@ class Config:
 
     ALPHA_PHI = 1.03e-4
     OMEGA_PHI = 1.76e7
+    THICKNESS = 2.94 * math.sqrt(2 * ALPHA_PHI / OMEGA_PHI)
     MM = 7.94e-18
     DD = 8.5e-10
     AA = 5.35e7

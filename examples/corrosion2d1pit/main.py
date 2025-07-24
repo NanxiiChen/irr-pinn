@@ -88,6 +88,7 @@ state = create_train_state(
     decay=cfg.DECAY,
     decay_every=cfg.DECAY_EVERY,
     xdim=len(cfg.DOMAIN) - 1,
+    end_value=1e-5
 )
 now = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 log_path = f"{cfg.LOG_DIR}/{cfg.PREFIX}/{now}"

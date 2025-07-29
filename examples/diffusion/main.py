@@ -31,12 +31,6 @@ from pinn import (
 class DiffusionPINN(PINN):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.loss_fn_panel = [
-            self.loss_pde,
-            self.loss_ic,
-            self.loss_bc,
-            self.loss_irr,
-        ]
 
     def ref_sol_bc(self, x, t):
         # zero Dirichlet boundary condition
@@ -53,7 +47,7 @@ class DiffusionPINN(PINN):
 causal_weightor = CausalWeightor(cfg.CAUSAL_CONFIGS["chunks"], cfg.DOMAIN[-1])
 loss_terms = [
     "pde",
-    "ic",
+    # "ic",
     "bc",
     "irr",
 ]
@@ -149,6 +143,16 @@ for epoch in range(cfg.EPOCHS):
             ]
         )
         
+        if cfg.CAUSAL_WEIGHT and epoch % cfg.SAVE_EVERY == 0:
+            fig = pinn.causal_weightor.plot_causal_info(
+                aux_vars["causal_weights"],
+                aux_vars["loss_chunks"],
+                cfg.CAUSAL_CONFIGS["eps"],
+            )
+            fig.suptitle(f"eps: {cfg.CAUSAL_CONFIGS['eps']:.2e}")
+            metrics_tracker.register_figure(epoch, fig, "causal_info")
+            plt.close(fig)
+
         metrics_tracker.flush()
     
 

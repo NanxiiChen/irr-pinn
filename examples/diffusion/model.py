@@ -36,8 +36,11 @@ class PINN(nn.Module):
 
     @partial(jit, static_argnums=(0,))
     def net_u(self, params, x, t):
-        phi = self.model.apply(params, x, t)
-        return phi
+        phi= self.model.apply(params, x, t)
+        sigma = self.cfg.SIGMA
+        phi0 = 1/(2*jnp.pi*sigma**2) * \
+            jnp.exp(-jnp.sum(x**2, axis=-1) / (2*sigma**2))
+        return phi * t + phi0[None]
 
 
     @partial(jit, static_argnums=(0,))
@@ -57,7 +60,7 @@ class PINN(nn.Module):
         x, t = batch
         residual = vmap(self.net_pde, in_axes=(None, 0, 0))(params, x, t)
         if not self.cfg.CAUSAL_WEIGHT:
-            loss = jnp.mean(residual**2), {}
+            return jnp.mean(residual**2), {}
         else:
             causal_data = jnp.stack((t.reshape(-1), ), axis=0)
             return self.causal_weightor.compute_causal_loss(residual, causal_data, eps)
@@ -125,7 +128,6 @@ class PINN(nn.Module):
         weights = self.grad_norm_weights(grads)
         if not self.cfg.IRR:
             weights = weights.at[-1].set(0.0)
-        weights = weights.at[1].set(weights[1]*5)
 
         return jnp.sum(weights * losses), (losses, weights, aux_vars)
 

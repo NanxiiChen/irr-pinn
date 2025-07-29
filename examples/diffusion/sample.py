@@ -95,7 +95,7 @@ class DiffusionSampler(Sampler):
     def sample(self, *args, **kwargs):
         return (
             self.sample_pde_rar(*args, **kwargs),
-            self.sample_ic(),
+            # self.sample_ic(),
             self.sample_bc(),
             self.sample_pde(),
         )

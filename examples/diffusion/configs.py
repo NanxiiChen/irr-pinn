@@ -6,7 +6,7 @@ class Config:
     ADAPTIVE_BASE_RATE = 5
     LR = 5e-4
     DECAY = 0.9
-    DECAY_EVERY = 200
+    DECAY_EVERY = 2000
     SAVE_EVERY = 50
     EMB_SCALE = (2.0, 2.0)  # emb sacle for (x, t)
     EMB_DIM = 64
@@ -19,17 +19,17 @@ class Config:
     TS = [0.0, 0.25, 0.50, 0.75, 1.0]
 
     NUM_LAYERS = 6
-    HIDDEN_DIM = 128
+    HIDDEN_DIM = 64
     OUT_DIM = 1
 
-    ACT_NAME = "swish"
+    ACT_NAME = "gelu"
     ARCH_NAME = "resnet"
     FOURIER_EMB = True
-    CAUSAL_WEIGHT = True
+    CAUSAL_WEIGHT = False
     IRR = True
 
     D = 0.2             # diffusion coefficient
-    SIGMA = 0.2         # initial gaussian width
+    SIGMA = 0.1         # initial gaussian width
 
     Lc = 1.0
     Tc = 1.0

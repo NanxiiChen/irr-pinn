@@ -1,12 +1,12 @@
 import math
 class Config:
-    EPOCHS = 10000
+    EPOCHS = 50000
     N_SAMPLES = 15
     ADAPTIVE_SAMPLES = 2000
     ADAPTIVE_BASE_RATE = 5
     LR = 5e-4
     DECAY = 0.9
-    DECAY_EVERY = 2000
+    DECAY_EVERY = 500
     SAVE_EVERY = 50
     EMB_SCALE = (2.0, 2.0)  # emb sacle for (x, t)
     EMB_DIM = 64
@@ -22,13 +22,13 @@ class Config:
     HIDDEN_DIM = 64
     OUT_DIM = 1
 
-    ACT_NAME = "gelu"
+    ACT_NAME = "swish"
     ARCH_NAME = "resnet"
     FOURIER_EMB = True
     CAUSAL_WEIGHT = False
     IRR = True
 
-    D = 0.2             # diffusion coefficient
+    D = 0.1             # diffusion coefficient
     SIGMA = 0.1         # initial gaussian width
 
     Lc = 1.0

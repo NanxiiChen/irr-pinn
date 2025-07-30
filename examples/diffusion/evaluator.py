@@ -48,7 +48,7 @@ def evaluate2D(pinn, params, mesh, ref_path, ts, **kwargs):
         )
         ax.yaxis.set_major_formatter(plt.FormatStrFormatter("%.2f"))
 
-        error += jnp.mean((pred - ref_sol) ** 2)
+        error += jnp.mean((pred - ref_sol) ** 2) / jnp.mean(ref_sol ** 2)
 
     plt.tight_layout()
     error /= len(ts)

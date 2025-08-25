@@ -1,5 +1,8 @@
 .vscode/
-
+eval-thickness.ipynb
+corrosion-2d-1pit-thickness1/
+corrosion-2d-1pit-thickness10/
+eval copy.ipynb
 demo/
 debug/
 output/

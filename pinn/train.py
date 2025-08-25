@@ -22,7 +22,10 @@ def create_train_state(model, rng, lr, **kwargs):
                                         staircase=False, 
                                         end_value=kwargs.get("end_value", 1e-5))
     if opt_method == "adam":
-        optimizer = optax.adam(scheduler)
+        optimizer = optax.chain(
+            optax.clip_by_global_norm(1.0),
+            optax.adam(scheduler),
+        )
     elif opt_method == "soap":
         from .optimizer import soap
         optimizer = soap(

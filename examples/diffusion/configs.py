@@ -23,9 +23,9 @@ class Config:
     OUT_DIM = 1
 
     ACT_NAME = "swish"
-    ARCH_NAME = "mlp"
+    ARCH_NAME = "modified_mlp"
     OPTIMIZER = "adam"
-    FOURIER_EMB = True
+    FOURIER_EMB = False
     CAUSAL_WEIGHT = False
     IRR = True
 

@@ -25,8 +25,8 @@ class Config:
 
     ACT_NAME = "tanh"
     ARCH_NAME = "resnet"
-    OPTIMIZER = "rprop"
-    FOURIER_EMB = True
+    OPTIMIZER = "adam"
+    FOURIER_EMB = False
     CAUSAL_WEIGHT = False
     IRR = False
 

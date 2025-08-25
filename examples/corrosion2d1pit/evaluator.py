@@ -3,8 +3,6 @@ import matplotlib.pyplot as plt
 from jax import random, vmap
 from matplotlib.gridspec import GridSpec
 
-from examples.ice_melting.configs import Config as cfg
-
 
 def evaluate2D(pinn, params, mesh, ref_path, ts, **kwargs):
     # fig, axes = plt.subplots(len(ts), 2, figsize=(10, 3*len(ts)))

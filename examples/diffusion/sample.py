@@ -27,7 +27,7 @@ class DiffusionSampler(Sampler):
         data = shifted_grid(
             self.mins,
             self.maxs,
-            [self.n_samples*2, self.n_samples, self.n_samples],
+            [self.n_samples, self.n_samples, self.n_samples],
             key,
         )
         return data[:, :-1], data[:, -1:]
@@ -92,8 +92,27 @@ class DiffusionSampler(Sampler):
 
     def sample(self, *args, **kwargs):
         return (
-            self.sample_pde_rar(*args, **kwargs),
+            self.sample_pde(),
             self.sample_ic(),
             self.sample_bc(),
-            self.sample_pde(),
+            self.sample_irr(),
         )
+
+    def sample_irr(self):
+        """直接在圆形区域内采样，避免浪费计算"""
+        key, self.key = random.split(self.key)
+        
+        # 极坐标采样
+        n_irr = self.n_samples**2  # 控制irr采样点数
+        r_samples = jnp.sqrt(random.uniform(key, (n_irr,))) * 0.5  # [0, 0.5]
+        theta_samples = random.uniform(key, (n_irr,)) * 2 * jnp.pi
+        
+        # 转换为笛卡尔坐标
+        x = r_samples * jnp.cos(theta_samples)
+        y = r_samples * jnp.sin(theta_samples)
+        irr_x = jnp.stack([x, y], axis=1)
+        
+        # 时间采样
+        t_samples = random.uniform(key, (n_irr, 1)) * (self.domain[2][1] - self.domain[2][0]) + self.domain[2][0]
+        
+        return irr_x, t_samples

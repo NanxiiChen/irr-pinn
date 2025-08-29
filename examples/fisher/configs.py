@@ -15,7 +15,7 @@ class Config:
     DOMAIN = [[-2.0, 2.0], [0, 3.0]]
     LOG_DIR = "/root/autodl-tmp/tf-logs"
     DATA_PATH = "./data/fisher/"
-    PREFIX = "fisher/irr"
+    PREFIX = "fisher/noirr"
     RESUME = None
     TS = [0.0, 0.1, 0.3, 0.7, 1.0]
 
@@ -28,7 +28,7 @@ class Config:
     OPTIMIZER = "adam"
     FOURIER_EMB = True
     CAUSAL_WEIGHT = False
-    IRR = True
+    IRR = False
     RAR = True
 
     SIGMA = 1.0

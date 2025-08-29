@@ -47,7 +47,8 @@ loss_terms = [
     "pde",
     "ic",
     "bc",
-    "irr",
+    "irr_x",
+    "irr_t",
 ]
 
 pinn = FisherPINN(
@@ -86,6 +87,7 @@ sampler = FisherSampler(
     adaptive_kw={
         "ratio": cfg.ADAPTIVE_BASE_RATE,
         "num": cfg.ADAPTIVE_SAMPLES,
+        "rar": cfg.RAR,
     },
 )
 

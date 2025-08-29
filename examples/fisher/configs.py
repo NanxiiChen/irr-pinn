@@ -9,26 +9,27 @@ class Config:
     DECAY = 0.9
     DECAY_EVERY = 500
     SAVE_EVERY = 50
-    EMB_SCALE = (2.0, 2.0)  # emb sacle for (x, t)
-    EMB_DIM = 64
+    EMB_SCALE = (5.0,)  # emb sacle for (x, t)
+    EMB_DIM = 32
 
-    DOMAIN = [[-2.0, 2.0], [0, 1.0]]
+    DOMAIN = [[-2.0, 2.0], [0, 3.0]]
     LOG_DIR = "/root/autodl-tmp/tf-logs"
     DATA_PATH = "./data/fisher/"
-    PREFIX = "fisher/noirr"
+    PREFIX = "fisher/irr"
     RESUME = None
-    TS = [0.0, 0.25, 0.50, 0.75, 1.0]
+    TS = [0.0, 0.1, 0.3, 0.7, 1.0]
 
-    NUM_LAYERS = 8
-    HIDDEN_DIM = 64
+    NUM_LAYERS = 4
+    HIDDEN_DIM = 40
     OUT_DIM = 1
 
-    ACT_NAME = "tanh"
-    ARCH_NAME = "resnet"
+    ACT_NAME = "swish"
+    ARCH_NAME = "modified_mlp"
     OPTIMIZER = "adam"
-    FOURIER_EMB = False
+    FOURIER_EMB = True
     CAUSAL_WEIGHT = False
-    IRR = False
+    IRR = True
+    RAR = True
 
     SIGMA = 1.0
     PHI = -1.0

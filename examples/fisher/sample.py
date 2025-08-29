@@ -13,6 +13,7 @@ class FisherSampler(Sampler):
         adaptive_kw={
             "ratio": 10,
             "num": 5000,
+            "rar": True,
         },
     ):
         self.n_samples = n_samples
@@ -61,11 +62,25 @@ class FisherSampler(Sampler):
         x = jnp.concatenate([x_left, x_right], axis=0)
         t = jnp.concatenate([ts, ts], axis=0)
         return x, t
+    
+    def sample_irr_t(self):
+        key, self.key = random.split(self.key)
+        ts = lhs_sampling(
+            mins=[self.domain[1][0],],
+            maxs=[self.domain[1][1],],
+            num=self.n_samples*10,
+            key=key,
+        )
+        x = jnp.zeros_like(ts)
+        return x, ts
 
     def sample(self, *args, **kwargs):
+        data = self.sample_pde_rar(*args, **kwargs) \
+            if self.adaptive_kw["rar"] else self.sample_pde()
         return (
-            self.sample_pde(),
+            data,
             self.sample_ic(),
             self.sample_bc(),
-            self.sample_pde(),
+            data,
+            self.sample_irr_t()
         )

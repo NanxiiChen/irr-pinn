@@ -65,7 +65,7 @@ class PINN(nn.Module):
             return self.causal_weightor.compute_causal_loss(residual, causal_data, eps)
 
     @partial(jit, static_argnums=(0,))
-    def net_irr(self, params, x, t, eps=1e-6):
+    def net_irr_x(self, params, x, t, eps=1e-8):
         # if x > 0, u_x < 0 
         # if x < 0, u_x > 0
         # ==> x * u_x <= 0
@@ -76,9 +76,15 @@ class PINN(nn.Module):
             jax.nn.relu(u_x),
             jax.nn.relu(-u_x)
         )
-        # irr = jax.nn.relu(x * u_x)
+        # irr = jax.nn.relu(x * u_x / (jnp.abs(x) + eps))
         return irr
-
+    
+    @partial(jit, static_argnums=(0,))
+    def net_irr_t(self, params, x, t, eps=1e-8):
+        # u_t <=0, we penalize the positive part of u_t
+        u_t = jax.jacrev(self.net_u, argnums=2)(params, x, t)[0]
+        irr = jax.nn.relu(u_t)
+        return irr
 
     def loss_ic(self, params, batch, *args, **kwargs):
         x, t = batch
@@ -92,11 +98,17 @@ class PINN(nn.Module):
         ref = vmap(self.ref_sol_bc, in_axes=(0, 0))(x, t)
         return jnp.mean((u - ref) ** 2), {}
 
-    def loss_irr(self, params, batch, *args, **kwargs):
+    def loss_irr_x(self, params, batch, *args, **kwargs):
         x, t = batch
-        irr = vmap(self.net_irr, in_axes=(None, 0, 0))(params, x, t)
+        irr = vmap(self.net_irr_x, in_axes=(None, 0, 0))(params, x, t)
         # irr should be non-positive
-        return jnp.mean(irr**2), {}
+        return jnp.mean(irr), {}
+    
+    def loss_irr_t(self, params, batch, *args, **kwargs):
+        x, t = batch
+        irr = vmap(self.net_irr_t, in_axes=(None, 0, 0))(params, x, t)
+        # irr should be non-positive
+        return jnp.mean(irr), {}
 
     @partial(jit, static_argnums=(0,))
     def compute_losses_and_grads(self, params, batch, eps):

@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 from flax import linen as nn
 from jax.nn.initializers import glorot_normal, normal, constant, zeros, uniform
+from jaxkan.KAN import KAN
 from .embeddings import FourierEmbedding, WaveletEmbedding
 from .activation import Snake, ModifiedReLU
 
@@ -186,12 +187,14 @@ class ModifiedMLP(nn.Module):
 
     @nn.compact
     def __call__(self, x, t):
-
         if self.fourier_emb:
-            t_emb = FourierEmbedding(self.emb_scale[1], self.emb_dim)(t)
-            x_emb = FourierEmbedding(self.emb_scale[0], self.emb_dim)(x)
-            # x_emb = RBFEmbedding()(x)
-            x = jnp.concatenate([x_emb, t_emb], axis=-1)
+            if len(self.emb_scale) == 1:
+                x = jnp.concatenate([x, t], axis=-1)
+                x = FourierEmbedding(self.emb_scale[0], self.emb_dim)(x)
+            else:
+                t_emb = FourierEmbedding(self.emb_scale[1], self.emb_dim)(t)
+                x_emb = FourierEmbedding(self.emb_scale[0], self.emb_dim)(x)
+                x = jnp.concatenate([x_emb, t_emb], axis=-1)
         else:
             x = jnp.concatenate([x, t], axis=-1)
 
@@ -333,3 +336,52 @@ class PirateNet(nn.Module):
             x = alpha * x + (1 - alpha) * identity
 
         return Dense(x.shape[-1], self.out_dim)(x)
+    
+
+class PIKAN(nn.Module):
+    act_name: str = "tanh"
+    num_layers: int = 4
+    hidden_dim: int = 64
+    out_dim: int = 2
+    fourier_emb: bool = True
+    emb_scale: tuple = (2.0, 2.0)
+    emb_dim: int = 64
+    n_heads: int = 4
+
+    def setup(self):
+        self.act_fn = get_activation(self.act_name)
+        # n_in = self.emb_dim * 4 if self.fourier_emb else 2
+        # self.kan = KAN(
+        #     layer_dims=[n_in] + [self.hidden_dim] * self.num_layers + [self.out_dim],
+        #     layer_type="base",
+        #     required_parameters={},
+        # )
+
+    @nn.compact
+    def __call__(self, x, t):
+        if self.fourier_emb:
+            if len(self.emb_scale) == 1:
+                x = jnp.concatenate([x, t], axis=-1)
+                x = FourierEmbedding(self.emb_scale[0], self.emb_dim)(x)
+            else:
+                t_emb = FourierEmbedding(self.emb_scale[1], self.emb_dim)(t)
+                x_emb = FourierEmbedding(self.emb_scale[0], self.emb_dim)(x)
+                x = jnp.concatenate([x_emb, t_emb], axis=-1)
+        else:
+            x = jnp.concatenate([x, t], axis=-1)
+
+        # 动态创建KAN，避免维度不匹配
+        if not hasattr(self, '_kan_initialized'):
+            actual_input_dim = x.shape[-1]
+            self.kan = KAN(
+                layer_dims=[actual_input_dim] + [self.hidden_dim] * self.num_layers + [self.out_dim],
+                layer_type="base",
+                required_parameters={},
+            )
+            self._kan_initialized = True
+        
+        x = self.kan(x)
+        return x
+
+        
+

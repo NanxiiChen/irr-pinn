@@ -2,6 +2,10 @@
 eval-thickness.ipynb
 corrosion-2d-1pit-thickness1/
 corrosion-2d-1pit-thickness10/
+examples/wave/
+examples/diffusion/
+data/wave/
+data/diffusion/
 eval copy.ipynb
 demo/
 debug/

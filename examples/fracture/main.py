@@ -46,7 +46,8 @@ class FracturePINN(PINN):
 
     def ref_sol_bc_crack(self, x, t):
         # phi = exp(-|y| / l)
-        phi = jnp.exp(-jnp.abs(x[1] / self.cfg.L))
+        phi = jnp.exp(-jnp.abs(x[1] / self.cfg.L)) * \
+            jnp.exp(-jax.nn.relu(x[0] * 100))
         return jax.lax.stop_gradient(phi)
 
     def ref_sol_ic_phi(self, x, t):
@@ -194,14 +195,14 @@ loss_terms = [
     "ic_phi",
     # "ic_ux",
     # "ic_uy",
-    "bc_bottom_phi",
+    # "bc_bottom_phi",
     # "bc_bottom_ux",
     # "bc_bottom_uy",
-    "bc_top_phi",
+    # "bc_top_phi",
     # "bc_top_ux",
     # "bc_top_uy",
     "bc_crack",
-    # "bc_sigmax",
+    "bc_sigmax",
     "irr",
     # "complementarity"
     # "irr_pf",
@@ -220,7 +221,7 @@ state = create_train_state(
     decay_every=cfg.DECAY_EVERY,
     xdim=cfg.DIM,
     optimizer=cfg.OPTIMIZER,
-    end_value=1e-6
+    end_value=1e-5
 )
 
 
@@ -249,7 +250,7 @@ sampler = FractureSampler(
 )
 
 stagger = StaggerSwitch(
-    pde_names=["stress", "pf"],
+    pde_names=["stress_y", "stress_x", "pf"],
     stagger_period=cfg.STAGGER_PERIOD
 )
 
@@ -276,8 +277,8 @@ for epoch in range(cfg.EPOCHS):
     # if epoch % cfg.STAGGER_PERIOD == 0:
     if epoch % 10 == 0:
         batch = sampler.sample(
-            fns=[pinn.psi],
-            # fns=[getattr(pinn, f"net_{pde_name}"),],
+            # fns=[pinn.psi],
+            fns=[getattr(pinn, f"net_{pde_name}"),],
             params=state.params,
             rar=pinn.cfg.RAR,
             model=pinn

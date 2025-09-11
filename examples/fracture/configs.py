@@ -4,7 +4,7 @@ from jax import numpy as jnp
 class Config:
     EPOCHS = 100000
     N_SAMPLES = 15
-    ADAPTIVE_SAMPLES = 500
+    ADAPTIVE_SAMPLES = 1000
     ADAPTIVE_BASE_RATE = 6
     LR = 5e-4
     DECAY = 0.9
@@ -23,16 +23,16 @@ class Config:
     # TS = [0.0000, 0.3000, 0.7000, 0.7400, 0.7800]
     TS = [0.0000, 0.2500, 0.5000, 0.7500, 1.0000]
 
-    NUM_LAYERS = 8
-    HIDDEN_DIM = 100
+    NUM_LAYERS = 6
+    HIDDEN_DIM = 64
     OUT_DIM = 3
 
     ACT_NAME = "swish" # tanh, swish, snake...
-    ARCH_NAME = "modified_mlp" # mlp, modified_mlp, moe
+    ARCH_NAME = "split_modified_mlp" # mlp, modified_mlp, moe
     OPTIMIZER = "adam"
     CHANGE_OPT_AT = 100000
     FOURIER_EMB = False
-    CAUSAL_WEIGHT = False
+    CAUSAL_WEIGHT = True
     IRR = True
     POINT_WISE_WEIGHT = False   # 有两种形式，1/(alpha + grad(phi)) 或者 exp(-grad(phi)*alpha)
     RAR = True   # RAR 和PWW实际上是相反作用，RAR强调界面，PWW弱化界面

@@ -10,7 +10,8 @@ from .arch import (
     ModifiedMLP,
     ResNet,
     MixtureOfExperts,
-    SpatialTemporalMLP
+    SpatialTemporalMLP,
+    SplitModifiedMLP
 )
 from pinn import CausalWeightor
 
@@ -35,6 +36,7 @@ class PINN(nn.Module):
             "resnet": ResNet,
             "moe": MixtureOfExperts,
             "spatial_temporal_mlp": SpatialTemporalMLP,
+            "split_modified_mlp": SplitModifiedMLP,
         }
         self.model = arch[self.cfg.ARCH_NAME](
             act_name=self.cfg.ACT_NAME,
@@ -74,7 +76,8 @@ class PINN(nn.Module):
         phi, disp = jnp.split(sol, [1], axis=-1)
         # scale_factor = jnp.array([1.0, 0.5]) * self.cfg.DISP_PRE_SCALE
         # disp = disp / scale_factor
-        phi = jnp.tanh(phi) / 2 + 0.5
+        # phi = jnp.tanh(phi) / 2 + 0.5
+        phi = jax.nn.sigmoid(phi)
         # phi = jnp.exp(-jnp.abs(x[1] / self.cfg.L)) * jnp.exp(-phi**2)
         # phi = self.scale_phi(phi)
         # phi = jnp.exp(-phi**2)
@@ -172,11 +175,11 @@ class PINN(nn.Module):
 
         div_damaged_sigma = jax.jacrev(damaged_sigma, argnums=0)(x, t)
         stress = jnp.einsum("ijj->i", div_damaged_sigma)
-        # stress = jnp.sqrt(jnp.sum(stress**2, axis=-1))
         return stress / self.cfg.STRESS_PRE_SCALE
+        # return jnp.linalg.norm(stress) / self.cfg.STRESS_PRE_SCALE
 
     def net_stress_x(self, params, x, t):
-        return self.net_stress(params, x, t)[0] * 10
+        return self.net_stress(params, x, t)[0]
 
     def net_stress_y(self, params, x, t):
         return self.net_stress(params, x, t)[1]
@@ -232,18 +235,18 @@ class PINN(nn.Module):
     # def net_pf(self, params, x, t):
     #     pf = self._net_pf(params, x, t)
     #     dphi_dt = self.net_speed(params, x, t)
-    #     # Apply KKT conditions
-    #     pf = jnp.where(
-    #         jnp.abs(dphi_dt) > 1e-3,  # dphi_dt != 0, cracking is growing,
-    #         pf,                      # indicating critical state, pf = 0
-    #         0,                    # dphi_dt = 0, pf can be any value
-    #     )
-    #     return pf
+    #     # # Apply KKT conditions
+    #     # pf = jnp.where(
+    #     #     jnp.abs(dphi_dt) > 1e-3,  # dphi_dt != 0, cracking is growing,
+    #     #     pf,                      # indicating critical state, pf = 0
+    #     #     0,                    # dphi_dt = 0, pf can be any value
+    #     # )
+    #     # return pf
 
-        # return jnp.array([
-        #     jax.nn.relu(-pf), # pf >=0
-        #     dphi_dt*pf,
-        # ])
+    #     return jnp.array([
+    #         jax.nn.relu(-pf), # pf >=0
+    #         dphi_dt*pf,
+    #     ])
 
     @partial(jit, static_argnums=(0,))
     def complementarity(self, params, x, t):
@@ -314,7 +317,7 @@ class PINN(nn.Module):
 
         fn = getattr(self, f"net_{pde_name}")
         residual = vmap(fn, in_axes=(None, 0, 0))(params, x, t)
-        if pde_name == "stress":
+        if pde_name == "stress" or pde_name == "pf":
             mse_res = jnp.mean(residual**2, axis=0)
             weights = jax.lax.stop_gradient(
                 jnp.mean(mse_res, axis=-1) / (mse_res + 1e-6)
@@ -357,7 +360,7 @@ class PINN(nn.Module):
             # loss, aux_vars = self.causal_weightor.compute_causal_loss(residual, t, eps)
             phi, _ = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
             phi = jax.lax.stop_gradient(phi)
-            causal_data = jnp.stack((t.reshape(-1), phi.reshape(-1),), axis=0)
+            causal_data = jnp.stack((t.reshape(-1),), axis=0)
             # causal_data = jnp.stack((t.reshape(-1),), axis=0)
             loss, aux_vars = self.causal_weightor.compute_causal_loss(
                 residual,

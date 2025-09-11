@@ -214,9 +214,9 @@ class FractureSampler(Sampler):
         return [
             pde,
             ic,
-            bc["bottom"],
-            bc["top"],
+            # bc["bottom"],
+            # bc["top"],
             bc["crack"],
-            # bc["vertical"],
+            bc["vertical"],
             pde, 
         ]

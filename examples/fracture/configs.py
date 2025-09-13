@@ -9,7 +9,7 @@ class Config:
     LR = 5e-4
     DECAY = 0.9
     DECAY_EVERY = 1000
-    STAGGER_PERIOD = 10
+    STAGGER_PERIOD = 25
     EMB_SCALE = (2.0, 2.0)  # emb sacle for (x, t)
     EMB_DIM = 128
 
@@ -19,7 +19,7 @@ class Config:
     LOG_DIR = "/root/autodl-tmp/tf-logs"
     PREFIX = "fracture/irr"
     RESUME = None
-    # RESUME = "/root/autodl-tmp/tf-logs/fracture/irr/2025-06-25-23-26-10/model-7000/"
+    # RESUME = "/root/autodl-tmp/tf-logs/fracture/irr/0913-saved-stage/model-89000/"
     # TS = [0.0000, 0.3000, 0.7000, 0.7400, 0.7800]
     TS = [0.0000, 0.2500, 0.5000, 0.7500, 1.0000]
 
@@ -62,10 +62,10 @@ class Config:
         "pf_eps": 50,
         "energy_eps": 1e-2,
         "step_size": 5,
-        "max_last_weight": 0.80,
+        "max_last_weight": 0.99,
         "min_mean_weight": 0.1,
         "max_eps": 50,
-        "chunks": 20,
+        "chunks": 10,
     }
 
     @classmethod

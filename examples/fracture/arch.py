@@ -279,13 +279,13 @@ class ModifiedMLP(nn.Module):
         phi = Dense(x.shape[-1], 1)(x)
         ux = MLPBlock(
             hidden_dim=self.hidden_dim,
-            num_layers=self.num_layers//2,
+            num_layers=self.num_layers,
             act_fn=self.act_fn,
             out_dim=1
         )(x)
         uy = MLPBlock(
             hidden_dim=self.hidden_dim,
-            num_layers=self.num_layers//2,
+            num_layers=self.num_layers,
             act_fn=self.act_fn,
             out_dim=1
         )(x)

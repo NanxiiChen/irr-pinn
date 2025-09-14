@@ -120,19 +120,19 @@ class PINN(nn.Module):
 
     @partial(jit, static_argnums=(0,))
     def sigma(self, params, x, t):
-        phi, disp = self.net_u(params, x, t)
-        phi = phi.squeeze(-1)
-        g_phi = (1 - phi) ** 2 + 1e-6
-        epsilon = self.epsilon(params, x, t)
-        dpsipos_deps = jax.grad(self.psi_pos, argnums=0)(epsilon)
-        dpsineg_deps = jax.grad(self.psi_neg, argnums=0)(epsilon)
-        return g_phi * dpsipos_deps + dpsineg_deps
+        # phi, disp = self.net_u(params, x, t)
+        # phi = phi.squeeze(-1)
+        # g_phi = (1 - phi) ** 2 + 1e-6
+        # epsilon = self.epsilon(params, x, t)
+        # dpsipos_deps = jax.grad(self.psi_pos, argnums=0)(epsilon)
+        # dpsineg_deps = jax.grad(self.psi_neg, argnums=0)(epsilon)
+        # return g_phi * dpsipos_deps + dpsineg_deps
         # sigma: (d, d)
-        # return 2.0 * self.cfg.MU * self.epsilon(
-        #     params, x, t
-        # ) + self.cfg.LAMBDA * jnp.trace(self.epsilon(params, x, t)) * jnp.eye(
-        #     self.cfg.DIM
-        # )
+        return 2.0 * self.cfg.MU * self.epsilon(
+            params, x, t
+        ) + self.cfg.LAMBDA * jnp.trace(self.epsilon(params, x, t)) * jnp.eye(
+            self.cfg.DIM
+        )
 
     # @partial(jit, static_argnums=(0,))
     # def net_stress(self, params, x, t):
@@ -191,48 +191,48 @@ class PINN(nn.Module):
 
         return pf / self.cfg.PF_PRE_SCALE
 
-    def net_pf(self, params, x, t):
-        pf = self._net_pf(params, x, t)
-        dphi_dt = self.net_speed(params, x, t)
-        phi, _ = self.net_u(params, x, t)
-        # weights = 0 when dphi_dt = 0
-        # weights = 0 when phi -> 1
-        # weights = jax.lax.stop_gradient(
-        #     jnp.where(dphi_dt <= 1e-3, 0.0, 1.0)
-        # ) * jax.lax.stop_gradient(
-        #     jnp.where(jnp.abs(phi-1) < 1e-3, 0.0, 1.0)
-        # )
-        # weights = jax.lax.stop_gradient(
-        #     jnp.where((jnp.abs(dphi_dt) <= 1e-3) | (jnp.abs(phi-1) < 1e-3), 0.0, 1.0)
-        # )
-        # pf = weights * pf
-
-        # # pf > 0 for dphi_dt = 0 and phi < 1, indicates not yet reached critical state
-        mask_pos_pf = (jnp.abs(dphi_dt) <= 1e-3) & (jnp.abs(phi-1) > 1e-3)
-        # # pf < 0 for phi = 1, indicates already totally fractured
-        mask_neg_pf = jnp.abs(phi-1) <= 1e-3
-        # # pf = 0 for dphi_dt > 0, indicates just at the critical state, cracking is growing
-        pf = jnp.where(
-            mask_pos_pf,
-            jax.nn.relu(-pf),
-            jnp.where(
-                mask_neg_pf,
-                jax.nn.relu(pf),
-                pf
-            )
-        )
-        return pf
-
     # def net_pf(self, params, x, t):
     #     pf = self._net_pf(params, x, t)
     #     dphi_dt = self.net_speed(params, x, t)
-    #     # Apply KKT conditions
+    #     phi, _ = self.net_u(params, x, t)
+    #     # weights = 0 when dphi_dt = 0
+    #     # weights = 0 when phi -> 1
+    #     # weights = jax.lax.stop_gradient(
+    #     #     jnp.where(dphi_dt <= 1e-3, 0.0, 1.0)
+    #     # ) * jax.lax.stop_gradient(
+    #     #     jnp.where(jnp.abs(phi-1) < 1e-3, 0.0, 1.0)
+    #     # )
+    #     # weights = jax.lax.stop_gradient(
+    #     #     jnp.where((jnp.abs(dphi_dt) <= 1e-3) | (jnp.abs(phi-1) < 1e-3), 0.0, 1.0)
+    #     # )
+    #     # pf = weights * pf
+
+    #     # # pf > 0 for dphi_dt = 0 and phi < 1, indicates not yet reached critical state
+    #     mask_pos_pf = (jnp.abs(dphi_dt) <= 1e-3) & (jnp.abs(phi-1) > 1e-3)
+    #     # # pf < 0 for phi = 1, indicates already totally fractured
+    #     mask_neg_pf = jnp.abs(phi-1) <= 1e-3
+    #     # # pf = 0 for dphi_dt > 0, indicates just at the critical state, cracking is growing
     #     pf = jnp.where(
-    #         jnp.abs(dphi_dt) > 1e-3,  # dphi_dt != 0, cracking is growing,
-    #         pf,                      # indicating critical state, pf = 0
-    #         0,                    # dphi_dt = 0, pf can be any value
+    #         mask_pos_pf,
+    #         jax.nn.relu(-pf),
+    #         jnp.where(
+    #             mask_neg_pf,
+    #             jax.nn.relu(pf),
+    #             pf
+    #         )
     #     )
     #     return pf
+
+    def net_pf(self, params, x, t):
+        pf = self._net_pf(params, x, t)
+        dphi_dt = self.net_speed(params, x, t)
+        # # Apply KKT conditions
+        pf = jnp.where(
+            jnp.abs(dphi_dt) > 1e-3,  # dphi_dt != 0, cracking is growing,
+            pf,                      # indicating critical state, pf = 0
+            0,                    # dphi_dt = 0, pf can be any value
+        )
+        return pf
 
         # return jnp.array([
         #     jax.nn.relu(-pf), # pf >=0
@@ -308,17 +308,17 @@ class PINN(nn.Module):
 
         fn = getattr(self, f"net_{pde_name}")
         residual = vmap(fn, in_axes=(None, 0, 0))(params, x, t)
-        # if pde_name == "stress" or pde_name == "pf":
-        #     mse_res = jnp.mean(residual**2, axis=0)
-        #     weights = jax.lax.stop_gradient(
-        #         jnp.mean(mse_res, axis=-1) / (mse_res + 1e-6)
-        #     )
-        #     # repeat weights to match the length of residual, [batch_size, 2]
-        #     weights = weights[None, :]
-        #     residual = jnp.sqrt(jnp.sum(residual**2 * weights, axis=-1))
+        if pde_name == "stress":
+            mse_res = jnp.mean(residual**2, axis=0)
+            weights = jax.lax.stop_gradient(
+                jnp.mean(mse_res, axis=-1) / (mse_res + 1e-6)
+            )
+            # repeat weights to match the length of residual, [batch_size, 2]
+            weights = weights[None, :]
+            residual = jnp.sqrt(jnp.sum(residual**2 * weights, axis=-1))
 
         # point-wise weight
-        if self.cfg.POINT_WISE_WEIGHT:
+        if self.cfg.POINT_WISE_WEIGHT and pde_name == "stress":
             nabla_phi_fn = jax.jacrev(
                 lambda params, x, t: self.net_u(params, x, t)[0], argnums=1
             )

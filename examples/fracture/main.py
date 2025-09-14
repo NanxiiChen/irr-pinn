@@ -155,17 +155,14 @@ class FracturePINN(PINN):
         phi = vmap(
             lambda params, x, t: self.net_u(params, x, t)[0], in_axes=(None, 0, 0)
         )(params, x, t).squeeze()
-        
-        # 只在没有断裂的位置施加边界条件
-        weight = jnp.where(phi < 0.05, 1.0, 0.0)
-        weight = weight * jnp.where(jnp.abs(x[:, 1]) > 0.1, 1.0, 0.0)
-        weight = jax.lax.stop_gradient(weight)
-        
+        phi = jax.lax.stop_gradient(phi)
+
         sigma = vmap(self.sigma, in_axes=(None, 0, 0))(params, x, t)
         sigma_xx = sigma[:, 0, 0]
         sigma_xy = sigma[:, 0, 1]
-        weighted_res = weight * (sigma_xx**2 + sigma_xy**2)
-        return jnp.mean(weighted_res), {}
+        res1 = (1-phi) ** 2 * sigma_xx
+        res2 = (1-phi) ** 2 * sigma_xy
+        return jnp.mean(res1**2) + jnp.mean(res2**2), {}
 
     def loss_pf_energy(self, params, batch, *args, **kwargs):
         x, t = batch
@@ -251,7 +248,7 @@ sampler = FractureSampler(
 )
 
 stagger = StaggerSwitch(
-    pde_names=["stress", "pf"],
+    pde_names=["stress_y", "stress_x", "pf"],
     stagger_period=cfg.STAGGER_PERIOD
 )
 

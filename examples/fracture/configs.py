@@ -41,7 +41,7 @@ class Config:
 
     GC = 2.7
     L = 0.024
-    UR = 0.0053
+    UR = 0.00525
     LOAD_ON_DIR = "y"
     LOAD_ON = 1 if LOAD_ON_DIR == "y" else 0
     LAMBDA = 121.1538e3

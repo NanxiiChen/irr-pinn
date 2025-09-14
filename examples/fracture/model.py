@@ -77,6 +77,7 @@ class PINN(nn.Module):
         # scale_factor = jnp.array([1.0, 0.5]) * self.cfg.DISP_PRE_SCALE
         # disp = disp / scale_factor
         # phi = jnp.tanh(phi) / 2 + 0.5
+        # phi = jnp.exp(-phi**2)
         phi = jax.nn.sigmoid(phi)
 
         # apply hard constraint on displacement
@@ -227,17 +228,17 @@ class PINN(nn.Module):
         pf = self._net_pf(params, x, t)
         dphi_dt = self.net_speed(params, x, t)
         # # Apply KKT conditions
-        pf = jnp.where(
-            jnp.abs(dphi_dt) > 1e-3,  # dphi_dt != 0, cracking is growing,
-            pf,                      # indicating critical state, pf = 0
-            0,                    # dphi_dt = 0, pf can be any value
-        )
-        return pf
+        # pf = jnp.where(
+        #     jnp.abs(dphi_dt) > 1e-3,  # dphi_dt != 0, cracking is growing,
+        #     pf,                      # indicating critical state, pf = 0
+        #     0,                    # dphi_dt = 0, pf can be any value
+        # )
+        # return pf
 
-        # return jnp.array([
-        #     jax.nn.relu(-pf), # pf >=0
-        #     dphi_dt*pf,
-        # ])
+        return jnp.array([
+            jax.nn.relu(-pf), # pf >=0
+            jax.lax.stop_gradient(dphi_dt)*pf,
+        ])
 
     @partial(jit, static_argnums=(0,))
     def complementarity(self, params, x, t):
@@ -308,7 +309,7 @@ class PINN(nn.Module):
 
         fn = getattr(self, f"net_{pde_name}")
         residual = vmap(fn, in_axes=(None, 0, 0))(params, x, t)
-        if pde_name == "stress":
+        if pde_name == "stress" or pde_name == "pf":
             mse_res = jnp.mean(residual**2, axis=0)
             weights = jax.lax.stop_gradient(
                 jnp.mean(mse_res, axis=-1) / (mse_res + 1e-6)

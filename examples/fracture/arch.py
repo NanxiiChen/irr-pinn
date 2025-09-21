@@ -253,12 +253,16 @@ class ModifiedMLP(nn.Module):
     @nn.compact
     def __call__(self, x, t):
 
-        x = jnp.concatenate([x, t], axis=-1)
         if self.fourier_emb:
             # x = FourierEmbedding(emb_scale=self.emb_scale[0], emb_dim=self.emb_dim)(x)
-            x_emb = FourierEmbedding(emb_scale=self.emb_scale[0], emb_dim=self.emb_dim)(x)
-            t_emb = FourierEmbedding(emb_scale=self.emb_scale[1], emb_dim=self.emb_dim)(t)
-            x = jnp.concatenate([x_emb, t_emb], axis=-1)
+            # x_emb = FourierEmbedding(emb_scale=self.emb_scale[0], emb_dim=self.emb_dim)(x)
+            # t_emb = FourierEmbedding(emb_scale=self.emb_scale[1], emb_dim=self.emb_dim)(t)
+            # x = jnp.concatenate([x_emb, t_emb], axis=-1)
+            x = FourierEmbedding(emb_scale=self.emb_scale[0], emb_dim=self.emb_dim)(
+                jnp.concatenate([x, t], axis=-1)
+            )
+        else:
+            x = jnp.concatenate([x, t], axis=-1)
 
         # x_feat = FourierEmbedding(emb_scale=self.emb_scale[0], emb_dim=self.emb_dim)(x)
         # t_feat = Dense(t.shape[-1], self.emb_dim*2)(t)
@@ -279,13 +283,13 @@ class ModifiedMLP(nn.Module):
         phi = Dense(x.shape[-1], 1)(x)
         ux = MLPBlock(
             hidden_dim=self.hidden_dim,
-            num_layers=self.num_layers//2,
+            num_layers=2,
             act_fn=self.act_fn,
             out_dim=1
         )(x)
         uy = MLPBlock(
             hidden_dim=self.hidden_dim,
-            num_layers=self.num_layers//2,
+            num_layers=2,
             act_fn=self.act_fn,
             out_dim=1
         )(x)
@@ -424,51 +428,39 @@ class SplitModifiedMLP(nn.Module):
 
     def setup(self):
         self.act_fn = get_activation(self.act_name)
+        self.phi_block = ModifiedMLPBlock(
+            hidden_dim=self.hidden_dim,
+            num_layers=self.num_layers//2,
+            act_fn=self.act_fn,
+            out_dim=1
+        )
+        self.disp_block = ModifiedMLPBlock(
+            hidden_dim=self.hidden_dim,
+            num_layers=self.num_layers,
+            act_fn=self.act_fn,
+            out_dim=self.out_dim - 1
+        )
 
     @nn.compact
     def __call__(self, x, t):
-        
+
         xt = jnp.concatenate([x, t], axis=-1)
-        
-        def phi_fn(x, t):
-            xt = jnp.concatenate([x, t], axis=-1)
-            phi_feat = ModifiedMLPBlock(
-                hidden_dim=self.hidden_dim,
-                num_layers=self.num_layers,
-                act_fn=self.act_fn,
-                out_dim=1
-            )(xt)
-            return jax.nn.sigmoid(phi_feat)
-        
-        phi = phi_fn(x, t)
-        nabla_phi = jax.jacrev(phi_fn, argnums=0)(x, t)[0]
-        # standardize nabla_phi to unit vector
-        nabla_phi = nabla_phi / (jnp.linalg.norm(nabla_phi, axis=-1, keepdims=True) + 1e-8)
-        nabla_phi = jax.lax.stop_gradient(nabla_phi)
-        # dphi_dx = nabla_phi[0]
-        dphi_dy = nabla_phi[1]
-
-        ux = MLPBlock(
-            hidden_dim=self.hidden_dim//2,
-            num_layers=self.num_layers//2,
-            act_fn=self.act_fn,
-            out_dim=1
-        )(xt)
-        uy_branch_1 = MLPBlock(
-            hidden_dim=self.hidden_dim//2,
-            num_layers=self.num_layers//2,
-            act_fn=self.act_fn,
-            out_dim=1
-        )(xt)
-        uy_branch_2 = MLPBlock(
-            hidden_dim=self.hidden_dim//2,
-            num_layers=self.num_layers//2,
-            act_fn=self.act_fn,
-            out_dim=1
-        )(xt)
-        uy = uy_branch_1 * dphi_dy + uy_branch_2 * (1 - dphi_dy)
-
+        phi = self.phi_block(xt)
+        phi = jax.nn.tanh(phi) / 2 + 0.5
+        if self.fourier_emb:
+            # disp_input = FourierEmbedding(emb_scale=self.emb_scale[0], emb_dim=self.emb_dim)(xt)
+            x_emb = FourierEmbedding(emb_scale=self.emb_scale[0], emb_dim=self.emb_dim)(x)
+            # t_emb = FourierEmbedding(emb_scale=self.emb_scale[1], emb_dim=self.emb_dim)(t)
+            t_emb = Dense(t.shape[-1], self.emb_dim*2)(t)
+            disp_input = jnp.concatenate([x_emb, t_emb], axis=-1)
+        else:
+            disp_input = xt
+        phi_info = jax.lax.stop_gradient(phi)
+        disp_input = jnp.concatenate([disp_input, phi_info], axis=-1)
+        disp = self.disp_block(disp_input)
+        disp = self.act_fn(disp)
+        ux = Dense(disp.shape[-1], 1)(disp)
+        uy = Dense(disp.shape[-1], 1)(disp)
         return jnp.concatenate([phi, ux, uy], axis=-1)
-
     
     

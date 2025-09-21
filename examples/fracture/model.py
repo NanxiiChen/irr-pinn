@@ -74,8 +74,9 @@ class PINN(nn.Module):
     def net_u(self, params, x, t):
         sol = self.model.apply(params, x, t)
         phi, disp = jnp.split(sol, [1], axis=-1)
-        scale_factor = jnp.array([1.0, 0.5]) * self.cfg.DISP_PRE_SCALE
-        disp = disp / scale_factor
+        # disp = disp * self.cfg.loading(t)
+        # scale_factor = jnp.array([1.0, 0.5]) * self.cfg.DISP_PRE_SCALE
+        # disp = disp / scale_factor
         phi = jnp.tanh(phi) / 2 + 0.5
         # phi = jnp.exp(-phi**2)
         # phi = jax.nn.sigmoid(phi)
@@ -83,10 +84,10 @@ class PINN(nn.Module):
         # apply hard constraint on displacement
         y0, y1 = self.cfg.DOMAIN[1]
         ux, uy = jnp.split(disp, 2, axis=-1)
-        ux = (x[1]-y0)*(x[1] - y1)*ux
-        uy = (x[1]-y0)*(x[1] - y1)*uy + \
+        ux = (x[1]-y0)*(x[1] - y1)*ux*t
+        uy = (x[1]-y0)*(x[1] - y1)*uy*t + \
             (x[1]-y0)/(y1-y0)*self.cfg.loading(t)
-        # # uy = (y1 - x[1])/ (y1-y0) * uy + (x[1]-y0) / (y1-y0) * self.cfg.loading(t)
+        # uy = (y1 - x[1])/ (y1-y0) * uy + (x[1]-y0) / (y1-y0) * self.cfg.loading(t)
         disp = jnp.concatenate((ux, uy), axis=-1)
         return phi, disp
 
@@ -236,13 +237,13 @@ class PINN(nn.Module):
     #     # )
     #     # return pf
 
-    #     # return jnp.array([
-    #     #     jax.nn.relu(-pf), # pf >=0
-    #     #     jax.lax.stop_gradient(dphi_dt)*pf,
-    #     # ])
-    #     return jnp.sqrt(
-    #         jax.nn.relu(-pf)**2 + (jax.lax.stop_gradient(dphi_dt)*pf)**2
-    #     )
+    #     return jnp.array([
+    #         jax.nn.relu(-pf), # pf >=0
+    #         jax.lax.stop_gradient(dphi_dt)*pf,
+    #     ])
+    #     # return jnp.sqrt(
+    #     #     jax.nn.relu(-pf)**2 + (jax.lax.stop_gradient(dphi_dt)*pf)**2
+    #     # )
 
     @partial(jit, static_argnums=(0,))
     def complementarity(self, params, x, t):
@@ -428,9 +429,7 @@ class PINN(nn.Module):
         weights = self.grad_norm_weights(grads)
         if not self.cfg.IRR:
             weights = weights.at[-1].set(0.0)
-        # weights = weights.at[-4].set(weights[-4] * 5)
-
-        # weights = weights.at[1].set(weights[1] * 5)
+        # weights = weights.at[-5].set(weights[-5] * 5)
 
         return jnp.sum(weights * losses), (losses, weights, aux_vars)
 

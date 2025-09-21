@@ -10,7 +10,7 @@ class Config:
     DECAY = 0.9
     DECAY_EVERY = 1000
     STAGGER_PERIOD = 25
-    EMB_SCALE = (2.0, 2.0)  # emb sacle for (x, t)
+    EMB_SCALE = (1.0, 1.0)  # emb sacle for (x, t)
     EMB_DIM = 128
 
     DOMAIN = [[-0.5, 0.5], [-0.5, 0.5], [0, 1.0]]
@@ -24,7 +24,7 @@ class Config:
     TS = [0.0000, 0.2500, 0.5000, 0.7500, 1.0000]
 
     NUM_LAYERS = 6
-    HIDDEN_DIM = 100
+    HIDDEN_DIM = 128
     OUT_DIM = 3
 
     ACT_NAME = "swish" # tanh, swish, snake...

@@ -262,7 +262,7 @@ sampler = FractureSampler(
 )
 
 stagger = StaggerSwitch(
-    pde_names=["stress", "pf"],
+    pde_names=["pf", "stress", "pf"],
     stagger_period=cfg.STAGGER_PERIOD
 )
 
@@ -317,7 +317,7 @@ for epoch in range(cfg.EPOCHS):
     if epoch % cfg.STAGGER_PERIOD == 0:
 
         # save the model
-        if epoch % 500 == 0:
+        if epoch % 200 == 0:
             ckpt.save(log_path + f"/model-{epoch}", state)
 
             fig, error = evaluate2D(

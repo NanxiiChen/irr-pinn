@@ -62,8 +62,9 @@ Ice melting involves irreversible phase transitions where the melting front can 
 
 Fracture propagation is inherently irreversible - once a crack forms or grows, it cannot spontaneously heal under the given loading conditions.
 
-![Fracture](./figures/fracture-t-disp-compare.png)
-![Fracture](./figures/fracture-sol.png)
+![Fracture](./figures/fracture-t-disp.png)
+![Fracture](./figures/fracture-phi.png)
+![Fracture](./figures/fracture-relerror-log.png)
 ![Fracture](./figures/fracture-irrloss-log.png)
 
 ### Combustion

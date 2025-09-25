@@ -38,7 +38,7 @@ This framework can be generalized to any inequality-based governing equations an
 
 ## Examples
 
-We demonstrate the effectiveness of our framework through five challenging applications that showcase temporal or spatial irreversibility constraints: corrosion modeling, ice melting simulation, fracture mechanics, combustion dynamics, and Fisher's equation. Each example demonstrates how irreversibility constraints lead to more physically consistent and accurate solutions compared to traditional PINN approaches.
+We demonstrate the effectiveness of our framework through five challenging applications that showcase temporal or spatial irreversibility constraints: corrosion modeling, ice melting simulation, fracture mechanics, combustion dynamics, and traveling wave phenomena. Each example demonstrates how irreversibility constraints lead to more physically consistent and accurate solutions compared to traditional PINN approaches.
 
 ### Corrosion
 
@@ -75,7 +75,16 @@ Combustion processes involve irreversible chemical reactions where the reaction 
 ![Combustion](./figures/combustion-error-log.png)
 ![Combustion](./figures/combustion-irrloss-log.png)
 
-### Fisher Equation
+### Traveling Wave
+
+Traveling wave phenomena, such as shock waves or solitons, exhibit spatial irreversibility where the wavefront propagates in a specific direction.
+
+![Traveling Wave](./figures/travelling_wave_sol.png)
+![Traveling Wave](./figures/travelling_wave_timesnap.png)
+![Traveling Wave](./figures/travelling-wave-error-log.png)
+![Traveling Wave](./figures/travelling-wave-irr-loss-log.png)
+
+<!-- ### Fisher Equation
 
 Fisher's equation models population dynamics and traveling wave phenomena, exhibiting both temporal irreversibility (population growth) and spatial irreversibility (wave propagation direction).
 
@@ -84,4 +93,4 @@ Fisher's equation models population dynamics and traveling wave phenomena, exhib
 ![Fisher](./figures/fisher-peak.png)
 ![Fisher](./figures/fisher-error-log.png)
 ![Fisher](./figures/fisher-irrlosst-log.png)
-![Fisher](./figures/fisher-irrlossx-log.png)
+![Fisher](./figures/fisher-irrlossx-log.png) -->

@@ -1,5 +1,6 @@
 # Respecting Hidden Irreversibility for Training Physics-Informed Neural Networks
 
+> Irreversibility is a fundamental physical law, yet PINNs often overlook it. We show that even the simplest explicit enforcement of this law leads to dramatic improvements.
 
 ## Overview
 

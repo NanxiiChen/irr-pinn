@@ -20,12 +20,10 @@ from examples.combustion import (
     evaluate1D,
     cfg,
 )
-from examples.combustion.train import train_step
+from examples.combustion.train import train_step, create_train_state
 
 from pinn import (
     MetricsTracker,
-    # train_step,
-    create_train_state,
 )
 
 class CombustionPINN(PINN):

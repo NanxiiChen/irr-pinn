@@ -20,10 +20,11 @@ from examples.combustion import (
     evaluate1D,
     cfg,
 )
-from examples.combustion.train import train_step, create_train_state
+from examples.combustion.train import train_step
 
 from pinn import (
     MetricsTracker,
+    create_train_state,
 )
 
 class CombustionPINN(PINN):
@@ -81,7 +82,8 @@ state = create_train_state(
     xdim=cfg.DIM,
     optimizer=cfg.OPTIMIZER,
     end_value=1e-6,
-    time_dependent=False
+    time_dependent=False,
+    grad_clip=None
 )
 
 
@@ -124,7 +126,8 @@ for epoch in range(cfg.EPOCHS):
             xdim=cfg.DIM,
             optimizer="adam",
             end_value=1e-6,
-            time_dependent=False
+            time_dependent=False,
+            grad_clip=None
         )
         state = state.replace(
             params=current_params,

@@ -14,7 +14,7 @@ current_dir = Path(__file__).resolve().parent
 project_root = current_dir.parent.parent
 sys.path.append(str(project_root))
 
-from examples.genes_propagation import (
+from examples.travelling_wave import (
     PINN,
     GenesPropSampler,
     evaluate1D,

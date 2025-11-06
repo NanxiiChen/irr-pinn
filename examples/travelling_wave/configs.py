@@ -14,8 +14,8 @@ class Config:
 
     DOMAIN = [[-1.0, 1.0], [0, 1.0]]
     LOG_DIR = "/root/autodl-tmp/tf-logs"
-    DATA_PATH = "./data/genes_prop/"
-    PREFIX = "genes_prop/noirr"
+    DATA_PATH = "./data/travelling-wave/"
+    PREFIX = "travelling-wave/irr"
     RESUME = None
     TS = [0.0, 5.0, 10.0, 15.0, 20.0]
 
@@ -28,7 +28,7 @@ class Config:
     OPTIMIZER = "adam"
     FOURIER_EMB = True
     CAUSAL_WEIGHT = False
-    IRR = False
+    IRR = True
     RAR = True
     POINT_WISE_WEIGHT = False
 
